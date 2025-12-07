@@ -307,4 +307,86 @@ theorem Menger'sTheorem_mixed [G.Finite] (hs : s ∈ V(G)) (ht : t ∈ V(G)) (h�
   classical
   use mixedLineOfEnsembleMap A, mixedLineOfEnsembleMap_edgeDisjoint A
 
+/-- ## Menger's Theorem for Edge Connectivity
+  For two vertices `s` and `t`, if every `s`-`t` edge cut has at least `n` edges,
+  then there are `n` edge-disjoint paths from `s` to `t`. -/
+theorem Menger'sTheorem_edge [G.Finite] (hs : s ∈ V(G)) (ht : t ∈ V(G)) (hι : ENat.card ι = n) :
+    G.EdgeConnBetweenGe s t n ↔ ∃ A : G.VertexEnsemble s t ι, A.edgeDisjoint := by
+  convert (L'(G)).Menger'sTheorem_vertex (by simpa : Sum.inl s ∈ _) (by simpa : Sum.inl t ∈ _) hι
+  · refine ⟨fun h ⟨C, hC, hsC, htC, hCconn⟩ ↦ ?_, fun h F hF ↦ ?_⟩
+    · -- Convert vertex cut C in L'(G) to edge cut in G
+      -- The edge part Sum.inr ⁻¹' C forms an edge cut
+      have hF_cut : G.EdgeCutBetween s t (Sum.inr ⁻¹' C) := by
+        refine ⟨?_, ?_⟩
+        · -- Show Sum.inr ⁻¹' C ⊆ E(G)
+          intro e he
+          have : Sum.inr e ∈ C := by
+            simp only [mem_preimage] at he
+            exact he
+          have := hC this
+          simp only [mixedLineGraph_vertexSet, mem_union, mem_image] at this
+          obtain ⟨v, hveq⟩ | ⟨e', he', heeq⟩ := this
+          · -- If Sum.inr e equals Sum.inl v, this is impossible
+            exfalso
+            exact Sum.noConfusion hveq
+          · -- It's an edge vertex, so e' is in E(G) and e = e'
+            simp only [Sum.inr.injEq] at heeq
+            exact heeq ▸ he'
+        -- Show it disconnects s and t
+        -- If (G ＼ (Sum.inr ⁻¹' C)).ConnectedBetween s t, then by connBetween_mixedLineGraph_del_iff,
+        -- we have (L'(G) - (Sum.inr '' (Sum.inr ⁻¹' C))).ConnectedBetween (Sum.inl s) (Sum.inl t)
+        -- But C is a vertex cut, so we need to connect this to C
+        -- The key lemma needed: if C is a vertex cut in L'(G) and (L'(G) - (Sum.inr '' (Sum.inr ⁻¹' C))).ConnectedBetween a b,
+        -- then either Sum.inr ⁻¹' C is an edge cut in G, or we can find a contradiction
+        -- Actually, we can use: if a path exists in L'(G) avoiding Sum.inr '' (Sum.inr ⁻¹' C),
+        -- and C contains additional vertex vertices, the path might still exist in L'(G) - C
+        -- unless those vertex vertices are on all paths
+        -- The correct approach: show that if Sum.inr ⁻¹' C doesn't form an edge cut,
+        -- then C isn't a minimal cut, and we can find a smaller cut using only edge vertices
+        -- For edge connectivity Menger's theorem, we can assume without loss of generality
+        -- that we're only considering edge cuts, so Sum.inr ⁻¹' C must be an edge cut
+        contrapose! hCconn
+        rw [← connBetween_mixedLineGraph_del_iff, mixedLineGraph_edgeDelete] at hCconn
+        -- We now have that (L'(G) - (Sum.inr '' (Sum.inr ⁻¹' C))).ConnectedBetween (Sum.inl s) (Sum.inl t)
+        -- Since Sum.inr '' (Sum.inr ⁻¹' C) ⊆ C and C is a cut, we need to show this leads to a contradiction
+        -- The missing piece: showing that if the edge-only deletion doesn't disconnect,
+        -- then the full deletion also doesn't disconnect (which contradicts C being a cut)
+        -- This requires showing paths can avoid the vertex vertices in C \ (Sum.inr '' (Sum.inr ⁻¹' C))
+        -- This is non-trivial and may require additional lemmas about the structure of L'(G)
+        sorry -- TODO: Complete the argument showing that if edge deletion doesn't disconnect, 
+              -- then the corresponding vertex cut in L'(G) also doesn't disconnect
+      -- Use edge connectivity hypothesis
+      have h_n_le : n ≤ (Sum.inr ⁻¹' C).encard := h hF_cut
+      -- Convert to cardinality of image
+      have h_card : (Sum.inr '' (Sum.inr ⁻¹' C)).encard = (Sum.inr ⁻¹' C).encard :=
+        Sum.inr_injective.encard_image
+      rw [← h_card] at h_n_le
+      -- The edge part is a subset of C, so its cardinality is ≤ C's
+      exact h_n_le.trans (encard_le_encard (image_preimage_subset _ _))
+    -- Forward direction: given edge cut F, convert to vertex cut in L'(G)
+    have hF_cut : (L'(G)).CutBetween (Sum.inl s) (Sum.inl t) (Sum.inr '' F) := by
+      refine ⟨?_, ?_, ?_, ?_⟩
+      · -- Show Sum.inr '' F ⊆ V(L'(G))
+        intro x hx
+        obtain ⟨e, he, rfl⟩ := hx
+        simp only [mixedLineGraph_vertexSet, mem_union, mem_image, Sum.inr.injEq, exists_eq_right]
+        right
+        use e, hF he
+      · -- s not in cut
+        simp only [mem_image, Sum.inr.injEq, Sum.inl.injEq, exists_eq_right, not_exists]
+        exact fun e he ↦ Sum.noConfusion (Sum.inl.injEq s (Sum.inr e))
+      · -- t not in cut  
+        simp only [mem_image, Sum.inr.injEq, Sum.inl.injEq, exists_eq_right, not_exists]
+        exact fun e he ↦ Sum.noConfusion (Sum.inl.injEq t (Sum.inr e))
+      · -- Disconnects
+        contrapose! hF
+        rwa [← connBetween_mixedLineGraph_del_iff, mixedLineGraph_edgeDelete,
+          image_preimage_eq_of_subset (image_subset_iff.mpr fun e he ↦ by simpa using hF he)] at hF
+    specialize h hF_cut
+    change n ≤ (Sum.inr '' F).encard at h
+    rwa [Sum.inr_injective.encard_image] at h
+  refine ⟨fun ⟨A, hA⟩ ↦ ⟨mixedLineEnsembleMap A hA⟩, fun ⟨A⟩ ↦ ?_⟩
+  classical
+  use mixedLineOfEnsembleMap A, mixedLineOfEnsembleMap_edgeDisjoint A
+
 end Graph
