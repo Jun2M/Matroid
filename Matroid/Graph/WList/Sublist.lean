@@ -2067,6 +2067,163 @@ lemma take_drop_comm (w : WList α β) (m n : ℕ) :
 
 -- Additional lemmas about take/drop/dropLast interactions can be added here as needed
 
+/-! ### Relationships with prefixUntil and suffixFrom -/
+
+@[simp]
+lemma take_prefixUntilVertex [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    w.take (w.idxOf x) = w.prefixUntilVertex x := by
+  induction w with
+  | nil u =>
+    simp only [mem_nil_iff] at hx
+    subst hx
+    simp [take, prefixUntilVertex, prefixUntil, idxOf_nil]
+  | cons u e w ih =>
+    obtain rfl | hne := eq_or_ne x u
+    · simp [take, prefixUntilVertex, prefixUntil, idxOf_cons_self]
+    · simp only [mem_cons_iff, hne, false_or] at hx
+      simp only [take_cons_succ, prefixUntilVertex_cons_of_ne _ hne.symm, idxOf_cons_ne hne.symm]
+      exact ih hx
+
+lemma take_eq_prefixUntilVertex_of_idxOf [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w)
+    (n : ℕ) (hn : n = w.idxOf x) :
+    w.take n = w.prefixUntilVertex x := by
+  rw [hn, take_prefixUntilVertex hx]
+
+@[simp]
+lemma drop_suffixFromVertex [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    w.drop (w.idxOf x) = w.suffixFromVertex x := by
+  induction w with
+  | nil u =>
+    simp only [mem_nil_iff] at hx
+    subst hx
+    simp [drop, suffixFromVertex, prefixUntil]
+  | cons u e w ih =>
+    obtain rfl | hne := eq_or_ne x u
+    · simp [drop, suffixFromVertex, prefixUntil, idxOf_cons_self]
+    · simp only [mem_cons_iff, hne, false_or] at hx
+      simp only [drop_cons_succ, idxOf_cons_ne hne.symm, suffixFromVertex_cons_of_ne _ hne.symm]
+      exact ih hx
+
+lemma drop_eq_suffixFromVertex_of_idxOf [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w)
+    (n : ℕ) (hn : n = w.idxOf x) :
+    w.drop n = w.suffixFromVertex x := by
+  rw [hn, drop_suffixFromVertex hx]
+
+lemma take_drop_prefixUntilVertex_suffixFromVertex [DecidableEq α] (w : WList α β) (x : α)
+    (hx : x ∈ w) :
+    w.take (w.idxOf x) ++ w.drop (w.idxOf x) = w.prefixUntilVertex x ++ w.suffixFromVertex x := by
+  rw [take_prefixUntilVertex hx, drop_suffixFromVertex hx]
+
+@[simp]
+lemma prefixUntilVertex_take [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) (n : ℕ)
+    (hn : w.idxOf x ≤ n) (hn' : n ≤ w.length) :
+    (w.take n).prefixUntilVertex x = w.prefixUntilVertex x := by
+  rw [take_prefixUntilVertex hx]
+  have : (w.prefixUntilVertex x).length ≤ n := by
+    rw [prefixUntilVertex_length hx]
+    exact hn
+  rw [take_eq_self_of_length_le this]
+
+@[simp]
+lemma suffixFromVertex_drop [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) (n : ℕ)
+    (hn : n ≤ w.idxOf x) :
+    (w.drop n).suffixFromVertex x = w.suffixFromVertex x := by
+  -- When we drop n vertices where n ≤ idxOf x, the suffixFromVertex remains the same
+  -- because x still appears at the same relative position
+  induction n generalizing w with
+  | zero => simp
+  | succ n IH =>
+    cases w with
+    | nil => simp at hx
+    | cons u e w =>
+      have hmem : x ∈ w := by
+        simp only [mem_cons_iff] at hx
+        exact hx.resolve_left (fun heq => by
+          subst heq
+          simp [idxOf_cons_self] at hn)
+      have hne : u ≠ x := by
+        intro heq
+        subst heq
+        simp [idxOf_cons_self] at hn
+      simp only [drop_cons_succ, suffixFromVertex_cons_of_ne _ hne, idxOf_cons_ne hne.symm] at hn ⊢
+      exact IH _ hmem (by omega)
+
+lemma take_prefixUntil [DecidablePred P] (w : WList α β) (h : ∃ u ∈ w, P u) :
+    w.take ((w.prefixUntil P).length) = w.prefixUntil P := by
+  have hpfx := prefixUntil_isPrefix w P
+  rw [take_eq_self_of_length_ge hpfx.length_le]
+
+lemma drop_suffixFrom [DecidablePred P] (w : WList α β) (h : ∃ u ∈ w, P u) :
+    w.drop ((w.length + 1) - (w.suffixFrom P).length) = w.suffixFrom P := by
+  -- This requires more careful calculation of the index
+  sorry
+
+lemma prefixUntil_take [DecidablePred P] (w : WList α β) (n : ℕ) (hn : n ≤ w.length)
+    (h : ∃ u ∈ w.take n, P u) :
+    (w.take n).prefixUntil P = w.prefixUntil P := by
+  have hpfx := prefixUntil_isPrefix w P
+  have hpfx' := prefixUntil_isPrefix (w.take n) P
+  refine hpfx'.eq_of_length_ge ?_
+  rw [hpfx.length_le, take_length]
+  omega
+
+lemma suffixFrom_drop [DecidablePred P] (w : WList α β) (n : ℕ) (hn : n ≤ w.length)
+    (h : ∃ u ∈ w.drop n, P u) :
+    (w.drop n).suffixFrom P = w.suffixFrom P := by
+  -- This requires showing that the first occurrence of P in w.drop n is the same as in w
+  sorry
+
+@[simp]
+lemma dropLast_prefixUntil [DecidablePred P] (w : WList α β) (hne : w.Nonempty)
+    (h : ∃ u ∈ w.dropLast, P u) :
+    (w.dropLast).prefixUntil P = w.prefixUntil P := by
+  have hpfx := prefixUntil_isPrefix w P
+  have hpfx' := prefixUntil_isPrefix w.dropLast P
+  refine hpfx'.eq_of_length_ge ?_
+  rw [hpfx.length_le, dropLast_length]
+  omega
+
+@[simp]
+lemma dropLast_suffixFrom [DecidablePred P] (w : WList α β) (hne : w.Nonempty)
+    (h : ∃ u ∈ w.dropLast, P u) :
+    (w.dropLast).suffixFrom P = w.suffixFrom P := by
+  -- This requires more careful handling
+  sorry
+
+@[simp]
+lemma prefixUntilVertex_dropLast [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w.dropLast)
+    (hne : w.Nonempty) :
+    (w.dropLast).prefixUntilVertex x = w.prefixUntilVertex x := by
+  have hxw : x ∈ w := by
+    rw [mem_iff_eq_mem_dropLast_or_eq_last] at hx
+    exact hx.elim id (fun heq => heq ▸ last_mem)
+  rw [← take_prefixUntilVertex hxw, ← take_prefixUntilVertex hx]
+  rw [take_dropLast]
+  exact hne.length_pos.le
+
+@[simp]
+lemma suffixFromVertex_dropLast [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w.dropLast)
+    (hne : w.Nonempty) :
+    (w.dropLast).suffixFromVertex x = w.suffixFromVertex x := by
+  -- This requires showing the index is the same
+  sorry
+
+lemma take_length_prefixUntilVertex [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    w.take (w.prefixUntilVertex x).length = w.prefixUntilVertex x := by
+  rw [prefixUntilVertex_length hx, take_prefixUntilVertex hx]
+
+lemma drop_length_suffixFromVertex [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    w.drop (w.idxOf x) = w.suffixFromVertex x :=
+  drop_suffixFromVertex hx
+
+lemma prefixUntilVertex_eq_take_idxOf [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    w.prefixUntilVertex x = w.take (w.idxOf x) :=
+  (take_prefixUntilVertex hx).symm
+
+lemma suffixFromVertex_eq_drop_idxOf [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    w.suffixFromVertex x = w.drop (w.idxOf x) :=
+  (drop_suffixFromVertex hx).symm
+
 lemma idxOf_eq_length_prefixUntilVertex [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
     w.idxOf x = (w.prefixUntilVertex x).length := by
   induction w with | nil => simp_all [prefixUntilVertex] | cons u e w ih =>
@@ -2076,6 +2233,31 @@ lemma idxOf_eq_length_prefixUntilVertex [DecidableEq α] (w : WList α β) (x : 
   simp only [hx, prefixUntilVertex, forall_const, ne_eq, hu.symm, not_false_eq_true, idxOf_cons_ne,
     prefixUntil_cons, ↓reduceIte, cons_length, Nat.add_right_cancel_iff] at ih ⊢
   assumption
+
+lemma take_n_eq_prefixUntilVertex_get [DecidableEq α] (w : WList α β) (n : ℕ) (hn : n ≤ w.length)
+    (hnd : w.vertex.Nodup) :
+    w.take n = w.prefixUntilVertex (w.get n) := by
+  rw [take_prefixUntilVertex (get_mem _ _), idxOf_get hnd hn]
+
+lemma drop_n_eq_suffixFromVertex_get [DecidableEq α] (w : WList α β) (n : ℕ) (hn : n ≤ w.length)
+    (hnd : w.vertex.Nodup) :
+    w.drop n = w.suffixFromVertex (w.get n) := by
+  rw [drop_suffixFromVertex (get_mem _ _), idxOf_get hnd hn]
+
+lemma prefixUntilVertex_append_suffixFromVertex_eq_take_drop [DecidableEq α] (w : WList α β)
+    (x : α) (hx : x ∈ w) :
+    w.prefixUntilVertex x ++ w.suffixFromVertex x = w.take (w.idxOf x) ++ w.drop (w.idxOf x) := by
+  rw [take_prefixUntilVertex hx, drop_suffixFromVertex hx]
+
+@[simp]
+lemma take_prefixUntilVertex_length [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    (w.prefixUntilVertex x).length = (w.take (w.idxOf x)).length := by
+  rw [take_prefixUntilVertex hx]
+
+@[simp]
+lemma drop_suffixFromVertex_length [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    (w.suffixFromVertex x).length = (w.drop (w.idxOf x)).length := by
+  rw [drop_suffixFromVertex hx]
 
 end drop
 
