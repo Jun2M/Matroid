@@ -119,7 +119,62 @@ lemma pathOfLineGraph_edge_eq_vertex [DecidableEq α] (P : WList β (Sym2 β)) (
     (pathOfLineGraph P hP he hf).edge = P.vertex := by
   -- This follows from the fact that pathOfLineGraph reconstructs vertices from edges
   -- Each edge in the reconstructed path corresponds to a vertex (edge) in the L(G) path
-  sorry -- TODO: Prove by induction on P
+  match P with
+  | nil e =>
+    simp [pathOfLineGraph, cons_edge, nil_vertex]
+    -- The reconstructed path is cons s e (nil t) or cons t e (nil s)
+    -- Both have edge set [e], and P.vertex = [e] for nil e
+    have ⟨x, y, he'⟩ := exists_isLink_of_mem_edgeSet (by simpa using he)
+    -- Determine which case we're in, but edge set is the same
+    by_cases hsx : x = s
+    · subst x; simp
+    · -- Then y = s case
+      have hys : y = s := by
+        have := he' : G.IsLink e x y
+        exact (this.right_mem.eq_or_eq_of_inc he).resolve_left hsx
+      subst y
+      simp
+  | cons e s_edge P' =>
+    simp [pathOfLineGraph, cons_edge, cons_vertex]
+    have hP' : L(G).IsPath P' := by simpa using hP.of_cons
+    have hadj : L(G).Adj e P'.first := by
+      have := hP.1
+      simp [cons_isWalk_iff] at this
+      exact this.1
+    simp [lineGraph_adj_iff] at hadj
+    obtain ⟨x, he_inc, hf_inc⟩ := hadj
+    have hfirst' : P'.first ∈ E(G, x) := by
+      simp [mem_incEdges_iff]
+      use x
+      exact ⟨hf_inc, by simpa using hP'.first_mem⟩
+    have hf' : P'.last ∈ E(G, t) := hf
+    -- Recursive case: pathOfLineGraph P' gives P_rec with P_rec.edge = P'.vertex
+    have ih := pathOfLineGraph_edge_eq_vertex P' hP' hfirst' hf'
+    -- The full path is cons s e P_rec, so edge set is e :: P_rec.edge = e :: P'.vertex
+    have ⟨a, b, he_link⟩ := exists_isLink_of_mem_edgeSet (by simpa using he)
+    have hs_ab : s = a ∨ s = b := by
+      have := he_link : G.IsLink e a b
+      exact (this.left_mem.eq_or_eq_of_inc he_inc).imp id (this.right_mem.eq_or_eq_of_inc he_inc)
+    -- In both cases, we have cons s e P_rec
+    obtain (rfl | rfl) := hs_ab
+    · -- s = a case
+      have hbx : b = x := by
+        have := he_link : G.IsLink e s b
+        have hsx : s = x ∨ G.IsLink e s x := Inc.eq_or_isLink_of_inc he hf_inc
+        obtain rfl | hlink := hsx
+        · sorry -- s = x case
+        · exact (this.eq_or_eq_of_isLink hlink).resolve_left (by sorry)
+      subst b
+      simp [ih]
+    · -- s = b case
+      have hax : a = x := by
+        have := he_link : G.IsLink e a s
+        have hsx : s = x ∨ G.IsLink e s x := Inc.eq_or_isLink_of_inc he hf_inc
+        obtain rfl | hlink := hsx
+        · sorry
+        · exact (this.symm.eq_or_eq_of_isLink hlink).resolve_left (by sorry)
+      subst a
+      simp [ih]
 
 lemma lineGraph_pathMap_last {P} (hP : G.IsPath P) (hne : P.Nonempty) :
     (lineGraph_pathMap P hP hne).last = hne.lastEdge := by
@@ -435,18 +490,29 @@ def vertexEnsembleOfSetEnsemble [DecidableEq α] (A : L(G).SetEnsemble)
     (hA P.prop).first_mem (hA P.prop).last_mem
   internallyDisjoint P Q hne := by
     -- Vertex-disjoint paths in L(G) become edge-disjoint paths in G
+    -- Actually, we can use the edge-disjoint property which we prove separately
+    -- If paths are edge-disjoint, they can only share vertices at endpoints
+    -- But since paths go from s to t and are vertex-disjoint in L(G), they are edge-disjoint in G
+    -- And edge-disjoint paths from s to t are internally vertex-disjoint (except possibly at s and t)
+    -- However, if they share s or t, that's fine for internallyDisjoint
+    -- The key is: if they share an internal vertex x, then x is incident to edges in both paths
+    -- Those edges would be vertices in both L(G) paths, contradicting vertex-disjointness
     ext x
     simp only [mem_inter_iff, mem_vertexSet_iff]
     constructor
     · intro ⟨hxP, hxQ⟩
       -- x is a vertex in both reconstructed paths
-      -- If two paths share a vertex in G, they must share an edge (since paths are connected)
-      -- This edge would be a vertex in both L(G) paths, contradicting vertex-disjointness
-      -- However, this requires showing that if paths share a vertex, they share an edge
-      -- This is not always true for arbitrary paths, but for paths in a graph it should hold
-      -- Actually, for internally disjoint paths, if they share a vertex, they must share an edge
-      -- because paths are connected and the shared vertex must be incident to some edge
-      sorry -- Need to show: if paths share a vertex, they share an edge (for paths)
+      -- We want to show this leads to a contradiction with vertex-disjointness in L(G)
+      -- If x is an internal vertex (not s or t), it's incident to edges in both paths
+      -- Those edges are vertices in both L(G) paths, contradiction
+      -- If x = s or x = t, that's allowed for internallyDisjoint
+      by_cases hx_end : x = s ∨ x = t
+      · -- x is an endpoint, which is allowed
+        tauto
+      · -- x is an internal vertex
+        -- x is incident to at least one edge in path P and one in path Q
+        -- We need to show these edges are the same or that this leads to a contradiction
+        sorry -- Complex: need to show internal shared vertex implies shared edge
     · tauto
 
 lemma vertexEnsembleOfSetEnsemble_edgeDisjoint [DecidableEq α] (A : L(G).SetEnsemble)
