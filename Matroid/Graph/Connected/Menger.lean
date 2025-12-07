@@ -1,7 +1,7 @@
 import Matroid.Graph.Connected.Set.Leg
 import Matroid.Graph.Connected.Vertex.VertexEnsemble
 import Matroid.Graph.Connected.MixedLineGraph
-import Matroid.Graph.Constructions.Basic
+import Matroid.Graph.Connected.LineGraph
 import Matroid.Graph.Finite
 import Mathlib.Data.Finite.Card
 
@@ -324,8 +324,8 @@ theorem Menger'sTheorem_edge [G.Finite] (hs : s ∈ V(G)) (ht : t ∈ V(G)) (hι
       exact fun e he ↦ he.edge_mem
   · refine ⟨fun h ⟨A, hA, hAcard⟩ ↦ ?_, fun h F hF ↦ ?_⟩
     · -- Convert set ensemble in L(G) to vertex ensemble in G
-      -- Need to show paths in L(G) from E(G,s) to E(G,t) correspond to edge-disjoint paths in G
-      sorry -- TODO: Convert paths in line graph to edge-disjoint paths in original graph
+      -- Paths in L(G) from E(G,s) to E(G,t) correspond to edge-disjoint paths in G
+      sorry -- TODO: Convert SetEnsemble in L(G) to VertexEnsemble in G with edge-disjoint property
     -- Forward direction: given edge cut F, convert to set cut in L(G)
     have hF_cut : (L(G)).IsSetCut (E(G, s)) (E(G, t)) F := by
       refine ⟨?_, ?_⟩
@@ -335,13 +335,15 @@ theorem Menger'sTheorem_edge [G.Finite] (hs : s ∈ V(G)) (ht : t ∈ V(G)) (hι
         exact hF he
       · -- Show it disconnects E(G, s) from E(G, t)
         contrapose! hF
-        -- If (L(G) - F).SetConnected (E(G, s)) (E(G, t)), then (G ＼ F).ConnectedBetween s t
-        -- This requires showing paths in line graph correspond to paths in original graph
-        sorry -- TODO: Show connectivity in line graph implies connectivity in original graph
+        rwa [← connBetween_lineGraph_del_iff] at hF
     specialize h hF_cut
     -- F.encard in L(G) equals F.encard in G since F ⊆ E(G) = V(L(G))
     exact h
   -- The reverse direction: edge-disjoint paths in G give vertex-disjoint paths in L(G)
-  sorry -- TODO: Convert edge-disjoint paths to vertex-disjoint paths in line graph
+  refine ⟨fun ⟨A, hA⟩ ↦ ?_, fun ⟨A⟩ ↦ ?_⟩
+  · -- Convert edge-disjoint VertexEnsemble in G to SetEnsemble in L(G)
+    sorry -- TODO: Convert VertexEnsemble in G to SetEnsemble in L(G)
+  · -- Convert SetEnsemble in L(G) to edge-disjoint VertexEnsemble in G
+    sorry -- TODO: Convert SetEnsemble in L(G) to VertexEnsemble in G
 
 end Graph
