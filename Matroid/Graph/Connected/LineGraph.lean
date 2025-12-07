@@ -113,6 +113,14 @@ lemma lineGraph_pathMap_vertex_eq_edge {P} (hP : G.IsPath P) (hne : P.Nonempty) 
       rw [ih]
       simp [List.cons_append]
 
+-- Helper lemma: edge set of pathOfLineGraph equals vertex set of L(G) path
+lemma pathOfLineGraph_edge_eq_vertex [DecidableEq α] (P : WList β (Sym2 β)) (hP : L(G).IsPath P)
+    (he : P.first ∈ E(G, s)) (hf : P.last ∈ E(G, t)) :
+    (pathOfLineGraph P hP he hf).edge = P.vertex := by
+  -- This follows from the fact that pathOfLineGraph reconstructs vertices from edges
+  -- Each edge in the reconstructed path corresponds to a vertex (edge) in the L(G) path
+  sorry -- TODO: Prove by induction on P
+
 lemma lineGraph_pathMap_last {P} (hP : G.IsPath P) (hne : P.Nonempty) :
     (lineGraph_pathMap P hP hne).last = hne.lastEdge := by
   cases P with
@@ -228,17 +236,86 @@ lemma IsPath.pathOfLineGraph [DecidableEq α] (P : WList β (Sym2 β)) (hP : L(G
     simp [pathOfLineGraph]
     -- Single edge path from s to t
     have ⟨x, y, he'⟩ := exists_isLink_of_mem_edgeSet (by simpa using he)
-    by_cases hsx : x = s
-    · subst x
-      simp [pathOfLineGraph]
-      exact ⟨IsWalk.cons (IsWalk.nil (by sorry)) he', by simp⟩
-    · -- Then y = s, and we need to show x = t
-      sorry
+    -- e is incident to both s and t
+    have ht_inc : G.Inc e t := by simpa [mem_incEdges_iff] using hf
+    -- Determine which endpoint is s and which is t
+    have hs_xy : s = x ∨ s = y := by
+      have := he' : G.IsLink e x y
+      exact (this.left_mem.eq_or_eq_of_inc he).imp id (this.right_mem.eq_or_eq_of_inc he)
+    have ht_xy : t = x ∨ t = y := by
+      have := he' : G.IsLink e x y
+      exact (this.left_mem.eq_or_eq_of_inc ht_inc).imp id (this.right_mem.eq_or_eq_of_inc ht_inc)
+    obtain (rfl | rfl) := hs_xy
+    · -- s = x
+      obtain (rfl | rfl) := ht_xy
+      · -- s = x, t = x means s = t
+        sorry -- Handle s = t case
+      · -- s = x, t = y
+        simp [pathOfLineGraph]
+        exact ⟨IsWalk.cons (IsWalk.nil he'.left_mem) he', by simp⟩
+    · -- s = y
+      obtain (rfl | rfl) := ht_xy
+      · -- s = y, t = x
+        simp [pathOfLineGraph]
+        exact ⟨IsWalk.cons (IsWalk.nil he'.right_mem) he'.symm, by simp⟩
+      · -- s = y, t = y means s = t
+        sorry -- Handle s = t case
   | cons e s_edge P' =>
     simp [pathOfLineGraph]
     have hP' : L(G).IsPath P' := by simpa using hP.of_cons
-    -- Recursive case
-    sorry -- Need to show the reconstructed path is valid
+    -- e is the first edge, incident to s
+    -- e and P'.first are adjacent (share a vertex x)
+    have hadj : L(G).Adj e P'.first := by
+      have := hP.1
+      simp [cons_isWalk_iff] at this
+      exact this.1
+    simp [lineGraph_adj_iff] at hadj
+    obtain ⟨x, he_inc, hf_inc⟩ := hadj
+    -- e is incident to both s and x
+    have ⟨a, b, he_link⟩ := exists_isLink_of_mem_edgeSet (by simpa using he)
+    have hs_ab : s = a ∨ s = b := by
+      have := he_link : G.IsLink e a b
+      exact (this.left_mem.eq_or_eq_of_inc he_inc).imp id (this.right_mem.eq_or_eq_of_inc he_inc)
+    have hfirst' : P'.first ∈ E(G, x) := by
+      simp [mem_incEdges_iff]
+      use x
+      exact ⟨hf_inc, by simpa using hP'.first_mem⟩
+    -- Recursively get the path from x to t
+    have P_rec := pathOfLineGraph P' hP' hfirst' hf
+    have hP_rec : G.IsPath P_rec := hP'.pathOfLineGraph hfirst' hf
+    -- Build the full path: s --e--> x --P_rec--> t
+    obtain (rfl | rfl) := hs_ab
+    · -- s = a, so b = x (the shared vertex)
+      have hbx : b = x := by
+        have := he_link : G.IsLink e s b
+        have hsx : s = x ∨ G.IsLink e s x := Inc.eq_or_isLink_of_inc he hf_inc
+        obtain rfl | hlink := hsx
+        · sorry -- s = x case
+        · exact (this.eq_or_eq_of_isLink hlink).resolve_left (by sorry)
+      subst b
+      -- We have cons s e P_rec where P_rec is a path from x to t
+      -- Need to show e connects s to P_rec.first = x
+      have hfirst_eq : P_rec.first = x := pathOfLineGraph_first P' hP' hfirst' hf
+      rw [hfirst_eq]
+      -- e connects s and x, and P_rec is a path from x
+      exact ⟨IsWalk.cons hP_rec.isWalk (he_link.trans (by rw [hfirst_eq])), by
+        simp [hfirst_eq]
+        -- s not in P_rec follows from path structure
+        sorry⟩
+    · -- s = b, so a = x
+      have hax : a = x := by
+        have := he_link : G.IsLink e a s
+        have hsx : s = x ∨ G.IsLink e s x := Inc.eq_or_isLink_of_inc he hf_inc
+        obtain rfl | hlink := hsx
+        · sorry
+        · exact (this.symm.eq_or_eq_of_isLink hlink).resolve_left (by sorry)
+      subst a
+      have hfirst_eq : P_rec.first = x := pathOfLineGraph_first P' hP' hfirst' hf
+      rw [hfirst_eq]
+      -- e connects s and x (via he_link.symm)
+      exact ⟨IsWalk.cons hP_rec.isWalk (he_link.symm.trans (by rw [hfirst_eq])), by
+        simp [hfirst_eq]
+        sorry⟩
 
 lemma pathOfLineGraph_first [DecidableEq α] (P : WList β (Sym2 β)) (hP : L(G).IsPath P)
     (he : P.first ∈ E(G, s)) (hf : P.last ∈ E(G, t)) :
@@ -249,11 +326,31 @@ lemma pathOfLineGraph_first [DecidableEq α] (P : WList β (Sym2 β)) (hP : L(G)
     have ⟨x, y, he'⟩ := exists_isLink_of_mem_edgeSet (by simpa using he)
     by_cases hsx : x = s
     · subst x; simp
-    · -- Then y = s
-      sorry
+    · -- Then y = s (since e is incident to s and e connects x and y, and x ≠ s)
+      have hys : y = s := by
+        have := he' : G.IsLink e x y
+        -- e is incident to s, and e connects x and y
+        -- Since x ≠ s, we must have y = s
+        exact (this.right_mem.eq_or_eq_of_inc he).resolve_left hsx
+      subst y
+      simp
   | cons e s_edge P' =>
     simp [pathOfLineGraph]
-    sorry
+    -- The path starts with s by construction
+    -- We build cons s e P_rec, so first is s
+    have hP' : L(G).IsPath P' := by simpa using hP.of_cons
+    have hadj : L(G).Adj e P'.first := by
+      have := hP.1
+      simp [cons_isWalk_iff] at this
+      exact this.1
+    simp [lineGraph_adj_iff] at hadj
+    obtain ⟨x, he_inc, hf_inc⟩ := hadj
+    have ⟨a, b, he_link⟩ := exists_isLink_of_mem_edgeSet (by simpa using he)
+    have hs_ab : s = a ∨ s = b := by
+      have := he_link : G.IsLink e a b
+      exact (this.left_mem.eq_or_eq_of_inc he_inc).imp id (this.right_mem.eq_or_eq_of_inc he_inc)
+    -- In both cases, we construct cons s e P_rec, so first = s
+    obtain (rfl | rfl) := hs_ab <;> simp
 
 lemma pathOfLineGraph_last [DecidableEq α] (P : WList β (Sym2 β)) (hP : L(G).IsPath P)
     (he : P.first ∈ E(G, s)) (hf : P.last ∈ E(G, t)) :
@@ -262,15 +359,68 @@ lemma pathOfLineGraph_last [DecidableEq α] (P : WList β (Sym2 β)) (hP : L(G).
   | nil e =>
     simp [pathOfLineGraph]
     -- Single edge: both endpoints determined by he and hf
-    sorry
+    have ⟨x, y, he'⟩ := exists_isLink_of_mem_edgeSet (by simpa using he)
+    -- e is incident to both s and t
+    have ht_inc : G.Inc e t := by simpa [mem_incEdges_iff] using hf
+    -- Determine which endpoint is t
+    have hst : s = x ∧ t = y ∨ s = y ∧ t = x := by
+      have hs_xy : s = x ∨ s = y := by
+        have := he' : G.IsLink e x y
+        exact (this.left_mem.eq_or_eq_of_inc he).imp id (this.right_mem.eq_or_eq_of_inc he)
+      have ht_xy : t = x ∨ t = y := by
+        have := he' : G.IsLink e x y
+        exact (this.left_mem.eq_or_eq_of_inc ht_inc).imp id (this.right_mem.eq_or_eq_of_inc ht_inc)
+      obtain (rfl | rfl) := hs_xy
+      · obtain (rfl | rfl) := ht_xy
+        · -- s = x, t = x means s = t - but this is a path from s to t, so they should be different
+          sorry -- Handle s = t case separately if needed
+        · exact Or.inl ⟨rfl, rfl⟩
+      · obtain (rfl | rfl) := ht_xy
+        · exact Or.inr ⟨rfl, rfl⟩
+        · sorry -- s = y, t = y means s = t
+    obtain (⟨rfl, rfl⟩ | ⟨rfl, rfl⟩) := hst
+    · simp
+    · simp
   | cons e s_edge P' =>
     simp [pathOfLineGraph]
     -- Last of recursive call equals t
     have hP' : L(G).IsPath P' := by simpa using hP.of_cons
-    have ih := pathOfLineGraph_last P' hP' (by sorry) hf
-    rw [ih]
-    -- But we need to show the last vertex of the full reconstructed path is t
-    sorry
+    have hadj : L(G).Adj e P'.first := by
+      have := hP.1
+      simp [cons_isWalk_iff] at this
+      exact this.1
+    simp [lineGraph_adj_iff] at hadj
+    obtain ⟨x, he_inc, hf_inc⟩ := hadj
+    have hfirst' : P'.first ∈ E(G, x) := by
+      simp [mem_incEdges_iff]
+      use x
+      exact ⟨hf_inc, by simpa using hP'.first_mem⟩
+    have ih := pathOfLineGraph_last P' hP' hfirst' hf
+    -- The reconstructed path is cons s e P_rec, so last = P_rec.last = t
+    have ⟨a, b, he_link⟩ := exists_isLink_of_mem_edgeSet (by simpa using he)
+    have hs_ab : s = a ∨ s = b := by
+      have := he_link : G.IsLink e a b
+      exact (this.left_mem.eq_or_eq_of_inc he_inc).imp id (this.right_mem.eq_or_eq_of_inc he_inc)
+    -- In both cases, we have cons s e P_rec, and last of cons is last of P_rec
+    obtain (rfl | rfl) := hs_ab
+    · -- s = a case
+      have hbx : b = x := by
+        have := he_link : G.IsLink e s b
+        have hsx : s = x ∨ G.IsLink e s x := Inc.eq_or_isLink_of_inc he hf_inc
+        obtain rfl | hlink := hsx
+        · sorry -- s = x case needs special handling
+        · exact (this.eq_or_eq_of_isLink hlink).resolve_left (by sorry)
+      subst b
+      simp [ih]
+    · -- s = b case
+      have hax : a = x := by
+        have := he_link : G.IsLink e a s
+        have hsx : s = x ∨ G.IsLink e s x := Inc.eq_or_isLink_of_inc he hf_inc
+        obtain rfl | hlink := hsx
+        · sorry
+        · exact (this.symm.eq_or_eq_of_isLink hlink).resolve_left (by sorry)
+      subst a
+      simp [ih]
 
 /-- Convert a SetEnsemble in L(G) to a VertexEnsemble in G with edge-disjoint property. -/
 def vertexEnsembleOfSetEnsemble [DecidableEq α] (A : L(G).SetEnsemble) 
@@ -287,9 +437,17 @@ def vertexEnsembleOfSetEnsemble [DecidableEq α] (A : L(G).SetEnsemble)
     -- Vertex-disjoint paths in L(G) become edge-disjoint paths in G
     ext x
     simp only [mem_inter_iff, mem_vertexSet_iff]
-    -- If paths share a vertex in G, they must share an edge, which contradicts vertex-disjointness in L(G)
-    -- This follows from the fact that vertices in L(G) are edges in G
-    sorry -- TODO: Show vertex-disjoint in L(G) implies edge-disjoint in G
+    constructor
+    · intro ⟨hxP, hxQ⟩
+      -- x is a vertex in both reconstructed paths
+      -- If two paths share a vertex in G, they must share an edge (since paths are connected)
+      -- This edge would be a vertex in both L(G) paths, contradicting vertex-disjointness
+      -- However, this requires showing that if paths share a vertex, they share an edge
+      -- This is not always true for arbitrary paths, but for paths in a graph it should hold
+      -- Actually, for internally disjoint paths, if they share a vertex, they must share an edge
+      -- because paths are connected and the shared vertex must be incident to some edge
+      sorry -- Need to show: if paths share a vertex, they share an edge (for paths)
+    · tauto
 
 lemma vertexEnsembleOfSetEnsemble_edgeDisjoint [DecidableEq α] (A : L(G).SetEnsemble)
     (hA : A.between (E(G, s)) (E(G, t))) :
@@ -314,10 +472,17 @@ lemma vertexEnsembleOfSetEnsemble_edgeDisjoint [DecidableEq α] (A : L(G).SetEns
       -- e is in the edge set of both reconstructed paths
       -- By lineGraph_pathMap_vertex_eq_edge, e is in the vertex set of both L(G) paths
       have heP' : e ∈ P.vertex := by
-        -- P is a path in L(G), and we need to show e is in its vertex set
-        -- This follows from the fact that pathOfLineGraph reconstructs the path
-        sorry -- Need inverse relationship: edge set of pathOfLineGraph equals vertex set of L(G) path
-      have heQ' : e ∈ Q.vertex := by sorry
+        -- e is in the edge set of the reconstructed path
+        -- By pathOfLineGraph_edge_eq_vertex, this equals the vertex set of P
+        have hmap := pathOfLineGraph_edge_eq_vertex P (A.valid P.prop).isPath 
+          (hA P.prop).first_mem (hA P.prop).last_mem
+        rw [← hmap] at heP
+        exact heP
+      have heQ' : e ∈ Q.vertex := by
+        have hmap := pathOfLineGraph_edge_eq_vertex Q (A.valid Q.prop).isPath 
+          (hA Q.prop).first_mem (hA Q.prop).last_mem
+        rw [← hmap] at heQ
+        exact heQ
       -- But paths are vertex-disjoint
       have hdj' := hdj
       rw [← hdj'] at heP'
