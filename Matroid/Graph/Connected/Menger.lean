@@ -1,6 +1,7 @@
 import Matroid.Graph.Connected.Set.Leg
 import Matroid.Graph.Connected.Vertex.VertexEnsemble
 import Matroid.Graph.Connected.MixedLineGraph
+import Matroid.Graph.Connected.LineGraph
 import Matroid.Graph.Finite
 import Mathlib.Data.Finite.Card
 
@@ -306,5 +307,50 @@ theorem Menger'sTheorem_mixed [G.Finite] (hs : s ∈ V(G)) (ht : t ∈ V(G)) (h�
   refine ⟨fun ⟨A, hA⟩ ↦ ⟨mixedLineEnsembleMap A hA⟩, fun ⟨A⟩ ↦ ?_⟩
   classical
   use mixedLineOfEnsembleMap A, mixedLineOfEnsembleMap_edgeDisjoint A
+
+/-- ## Menger's Theorem for Edge Connectivity
+  For two vertices `s` and `t`, if every `s`-`t` edge cut has at least `n` edges,
+  then there are `n` edge-disjoint paths from `s` to `t`. -/
+theorem Menger'sTheorem_edge [G.Finite] (hs : s ∈ V(G)) (ht : t ∈ V(G)) (hι : ENat.card ι = n) :
+    G.EdgeConnBetweenGe s t n ↔ ∃ A : G.VertexEnsemble s t ι, A.edgeDisjoint := by
+  -- Use Menger's theorem for set connectivity in the line graph L(G)
+  -- Edge cuts in G correspond to vertex cuts in L(G)
+  -- Edge-disjoint paths s-t in G correspond to vertex-disjoint paths E(G,s)-E(G,t) in L(G)
+  convert (L(G)).Menger'sTheorem_set (E(G, s) ⊆ V(L(G))) (E(G, t) ⊆ V(L(G))) n
+  · -- Show E(G, s) and E(G, t) are subsets of V(L(G))
+    · simp only [LineGraph_vertexSet]
+      exact fun e he ↦ he.edge_mem
+    · simp only [LineGraph_vertexSet]
+      exact fun e he ↦ he.edge_mem
+  · refine ⟨fun h ⟨A, hA, hAcard⟩ ↦ ?_, fun h F hF ↦ ?_⟩
+    · -- Convert set ensemble in L(G) to vertex ensemble in G
+      -- Paths in L(G) from E(G,s) to E(G,t) correspond to edge-disjoint paths in G
+      classical
+      have hA_between : A.between (E(G, s)) (E(G, t)) := hA
+      use vertexEnsembleOfSetEnsemble A hA_between
+      exact vertexEnsembleOfSetEnsemble_edgeDisjoint A hA_between
+    -- Forward direction: given edge cut F, convert to set cut in L(G)
+    have hF_cut : (L(G)).IsSetCut (E(G, s)) (E(G, t)) F := by
+      refine ⟨?_, ?_⟩
+      · -- Show F ⊆ V(L(G))
+        intro e he
+        simp only [LineGraph_vertexSet]
+        exact hF he
+      · -- Show it disconnects E(G, s) from E(G, t)
+        contrapose! hF
+        rwa [← connBetween_lineGraph_del_iff] at hF
+    specialize h hF_cut
+    -- F.encard in L(G) equals F.encard in G since F ⊆ E(G) = V(L(G))
+    exact h
+  -- The reverse direction: edge-disjoint paths in G give vertex-disjoint paths in L(G)
+  refine ⟨fun ⟨A, hA⟩ ↦ ?_, fun ⟨A, hA, hAcard⟩ ↦ ?_⟩
+  · -- Convert edge-disjoint VertexEnsemble in G to SetEnsemble in L(G)
+    use setEnsembleOfVertexEnsemble A hA, setEnsembleOfVertexEnsemble_between A hA
+    -- Need to show encard matches - paths in L(G) correspond 1-1 to paths in G
+    sorry -- TODO: Show encard of SetEnsemble equals encard of VertexEnsemble (they're in bijection)
+  · -- Convert SetEnsemble in L(G) to edge-disjoint VertexEnsemble in G
+    classical
+    use vertexEnsembleOfSetEnsemble A hA
+    exact vertexEnsembleOfSetEnsemble_edgeDisjoint A hA
 
 end Graph
