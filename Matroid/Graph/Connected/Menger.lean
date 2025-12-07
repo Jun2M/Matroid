@@ -325,7 +325,10 @@ theorem Menger'sTheorem_edge [G.Finite] (hs : s ∈ V(G)) (ht : t ∈ V(G)) (hι
   · refine ⟨fun h ⟨A, hA, hAcard⟩ ↦ ?_, fun h F hF ↦ ?_⟩
     · -- Convert set ensemble in L(G) to vertex ensemble in G
       -- Paths in L(G) from E(G,s) to E(G,t) correspond to edge-disjoint paths in G
-      sorry -- TODO: Convert SetEnsemble in L(G) to VertexEnsemble in G with edge-disjoint property
+      classical
+      have hA_between : A.between (E(G, s)) (E(G, t)) := hA
+      use vertexEnsembleOfSetEnsemble A hA_between
+      exact vertexEnsembleOfSetEnsemble_edgeDisjoint A hA_between
     -- Forward direction: given edge cut F, convert to set cut in L(G)
     have hF_cut : (L(G)).IsSetCut (E(G, s)) (E(G, t)) F := by
       refine ⟨?_, ?_⟩
@@ -340,10 +343,14 @@ theorem Menger'sTheorem_edge [G.Finite] (hs : s ∈ V(G)) (ht : t ∈ V(G)) (hι
     -- F.encard in L(G) equals F.encard in G since F ⊆ E(G) = V(L(G))
     exact h
   -- The reverse direction: edge-disjoint paths in G give vertex-disjoint paths in L(G)
-  refine ⟨fun ⟨A, hA⟩ ↦ ?_, fun ⟨A⟩ ↦ ?_⟩
+  refine ⟨fun ⟨A, hA⟩ ↦ ?_, fun ⟨A, hA, hAcard⟩ ↦ ?_⟩
   · -- Convert edge-disjoint VertexEnsemble in G to SetEnsemble in L(G)
-    sorry -- TODO: Convert VertexEnsemble in G to SetEnsemble in L(G)
+    use setEnsembleOfVertexEnsemble A hA, setEnsembleOfVertexEnsemble_between A hA
+    -- Need to show encard matches - paths in L(G) correspond 1-1 to paths in G
+    sorry -- TODO: Show encard of SetEnsemble equals encard of VertexEnsemble (they're in bijection)
   · -- Convert SetEnsemble in L(G) to edge-disjoint VertexEnsemble in G
-    sorry -- TODO: Convert SetEnsemble in L(G) to VertexEnsemble in G
+    classical
+    use vertexEnsembleOfSetEnsemble A hA
+    exact vertexEnsembleOfSetEnsemble_edgeDisjoint A hA
 
 end Graph
