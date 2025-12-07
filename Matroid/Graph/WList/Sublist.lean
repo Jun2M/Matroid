@@ -1636,21 +1636,593 @@ lemma Nontrivial.firstEdge_ne_lastEdge (hw : w.Nontrivial) (hnd : w.edge.Nodup) 
 
     -- Nonempty.lastEdge w (show w.Nonempty by rw [WList.nonempty_iff_]) ∈ w.tail.edge := sorry
 
--- def take : WList α β → ℕ → WList α β
---   | nil x, _ => nil x
---   | cons x _ _, 0 => nil x
---   | cons x e w, n+1 => cons x e (w.take n)
+/-- Take the first `n` vertices from a `WList`. Returns the entire list if `n ≥ w.length + 1`. -/
+def take : WList α β → ℕ → WList α β
+  | nil x, _ => nil x
+  | cons x _ _, 0 => nil x
+  | cons x e w, n+1 => cons x e (w.take n)
 
--- @[simp]
--- lemma take_nil (x : α) (n : ℕ) : (nil x (β := β)).take n = nil x := rfl
+@[simp]
+lemma take_nil (x : α) (n : ℕ) : (nil x (β := β)).take n = nil x := rfl
 
--- @[simp]
--- lemma take_zero (w : WList α β) : w.take 0 = nil w.first := by
---   cases w with simp [take]
+@[simp]
+lemma take_zero (w : WList α β) : w.take 0 = nil w.first := by
+  cases w with simp [take]
 
--- @[simp]
--- lemma take_cons_succ (x e) (w : WList α β) (n : ℕ) :
---   (cons x e w).take (n+1) = cons x e (w.take n) := rfl
+@[simp]
+lemma take_cons_succ (x e) (w : WList α β) (n : ℕ) :
+  (cons x e w).take (n+1) = cons x e (w.take n) := rfl
+
+@[simp]
+lemma take_length (w : WList α β) (n : ℕ) : (w.take n).length = min n w.length := by
+  induction n generalizing w with
+  | zero => cases w with simp [take, min_zero_left]
+  | succ n IH =>
+    cases w with
+    | nil x => simp [take, min_eq_right (by omega)]
+    | cons x e w =>
+      simp only [take_cons_succ, cons_length, IH, Nat.min_succ_succ, Nat.add_min_distrib_right]
+
+@[simp]
+lemma take_length_le (w : WList α β) (n : ℕ) : (w.take n).length ≤ n := by
+  simp [min_le_left]
+
+@[simp]
+lemma take_length_le' (w : WList α β) (n : ℕ) : (w.take n).length ≤ w.length := by
+  simp [min_le_right]
+
+lemma take_eq_self : w.take w.length = w := by
+  induction w with
+  | nil => simp [take]
+  | cons x e w ih =>
+    simp only [cons_length, take_cons_succ, ih]
+
+lemma take_eq_self_of_length_le (h : w.length ≤ n) : w.take n = w := by
+  rw [← take_eq_self, take_length] at h ⊢
+  simp [min_eq_right h]
+
+@[simp]
+lemma take_first (w : WList α β) (n : ℕ) : (w.take n).first = w.first := by
+  cases n with
+  | zero => simp
+  | succ n =>
+    cases w with
+    | nil => simp
+    | cons => simp
+
+@[simp]
+lemma take_last (w : WList α β) (n : ℕ) (hn : n ≤ w.length) : (w.take n).last = w.get n := by
+  induction n generalizing w with
+  | zero => simp [get_zero]
+  | succ n IH =>
+    cases w with
+    | nil => simp at hn
+    | cons x e w =>
+      simp only [take_cons_succ, last_cons, cons_length, Nat.add_le_add_iff_right] at hn ⊢
+      exact IH _ hn
+
+lemma take_last_of_length_le (w : WList α β) (n : ℕ) (h : w.length ≤ n) :
+    (w.take n).last = w.last := by
+  rw [take_eq_self_of_length_le h]
+
+@[simp]
+lemma take_vertex (w : WList α β) (n : ℕ) : (w.take n).vertex = w.vertex.take (n + 1) := by
+  induction n generalizing w with
+  | zero => cases w with simp [take]
+  | succ n IH =>
+    cases w with
+    | nil => simp [take]
+    | cons x e w =>
+      simp only [take_cons_succ, cons_vertex, List.take_succ_cons, IH]
+
+@[simp]
+lemma take_edge (w : WList α β) (n : ℕ) : (w.take n).edge = w.edge.take n := by
+  induction n generalizing w with
+  | zero => cases w with simp [take]
+  | succ n IH =>
+    cases w with
+    | nil => simp [take]
+    | cons x e w =>
+      simp only [take_cons_succ, cons_edge, List.take_succ_cons, IH]
+
+@[simp]
+lemma take_concat (w : WList α β) (e : β) (x : α) (n : ℕ) :
+    (w.concat e x).take n = if n ≤ w.length then w.take n else w.concat e x := by
+  split_ifs with h
+  · induction n generalizing w with
+    | zero => simp
+    | succ n IH =>
+      cases w with
+      | nil => simp [take, concat]
+      | cons u f w =>
+        simp only [take_cons_succ, cons_concat, cons_length, Nat.add_le_add_iff_right] at h ⊢
+        rw [IH _ h]
+  · rw [take_eq_self_of_length_le]
+    simp only [concat_length, not_le] at h
+    omega
+
+@[simp]
+lemma take_append (w₁ w₂ : WList α β) (n : ℕ) :
+    (w₁ ++ w₂).take n = if n ≤ w₁.length then w₁.take n else w₁ ++ w₂.take (n - w₁.length) := by
+  split_ifs with h
+  · induction n generalizing w₁ with
+    | zero => simp
+    | succ n IH =>
+      cases w₁ with
+      | nil => simp
+      | cons x e w₁ =>
+        simp only [take_cons_succ, cons_append, cons_length, Nat.add_le_add_iff_right] at h ⊢
+        rw [IH _ h]
+  · induction w₁ generalizing n with
+    | nil => simp
+    | cons x e w₁ ih =>
+      simp only [cons_append, cons_length, take_cons_succ]
+      have : n > w₁.length + 1 := by omega
+      rw [ih (by omega)]
+      simp [Nat.sub_add_eq]
+
+lemma take_take (w : WList α β) (m n : ℕ) : (w.take n).take m = w.take (min m n) := by
+  induction n generalizing m w with
+  | zero => simp [take, min_zero_left]
+  | succ n IH =>
+    cases m with
+    | zero => simp
+    | succ m =>
+      cases w with
+      | nil => simp
+      | cons x e w =>
+        simp only [take_cons_succ, IH, Nat.min_succ_succ]
+
+@[simp]
+lemma take_reverse (w : WList α β) (n : ℕ) :
+    (w.reverse).take n = (w.drop ((w.length + 1) - n)).reverse := by
+  by_cases h : n ≤ w.length + 1
+  · induction n generalizing w with
+    | zero =>
+      simp only [take_zero, reverse_first]
+      have : (w.length + 1) - 0 = w.length + 1 := rfl
+      rw [this]
+      rw [drop_eq_nil_of_length_le (by omega), reverse_nil]
+    | succ n IH =>
+      cases w with
+      | nil x =>
+        simp only [reverse_nil, take_nil, nil_length, drop_nil, reverse_nil]
+      | cons x e w =>
+        simp only [reverse_cons, take_cons_succ, cons_length]
+        by_cases hn : n ≤ w.length + 1
+        · rw [IH _ hn]
+          simp only [reverse_cons, cons_length]
+          congr 1
+          have : (cons x e w).length + 1 - (n + 1) = w.length + 1 - n := by
+            simp only [cons_length]
+            omega
+          rw [this, drop_cons_succ]
+        · have : w.length + 1 < n := by omega
+          have hsub1 : (cons x e w).length + 1 - (n + 1) = 0 := by
+            simp only [cons_length]
+            omega
+          have hsub2 : w.length + 1 - n = 0 := by omega
+          simp [hsub1, hsub2, drop_zero, reverse_cons]
+          rw [take_eq_self_of_length_le]
+          simp only [reverse_length, cons_length] at h
+          omega
+  · have : w.length + 1 ≤ n := by omega
+    have hsub : (w.length + 1) - n = 0 := by omega
+    simp [hsub, drop_zero]
+    rw [take_eq_self_of_length_le, reverse_reverse]
+    simp only [reverse_length] at this
+    omega
+
+/-- Drop the first `n` vertices from a `WList`. Returns `nil w.last` if `n ≥ w.length + 1`. -/
+def drop : WList α β → ℕ → WList α β
+  | w, 0 => w
+  | nil x, _ => nil x
+  | cons _ e w, n+1 => w.drop n
+
+@[simp]
+lemma drop_zero (w : WList α β) : w.drop 0 = w := rfl
+
+@[simp]
+lemma drop_nil (x : α) (n : ℕ) : (nil x (β := β)).drop n = nil x := rfl
+
+@[simp]
+lemma drop_cons_succ (x e) (w : WList α β) (n : ℕ) :
+  (cons x e w).drop (n+1) = w.drop n := rfl
+
+@[simp]
+lemma drop_length (w : WList α β) (n : ℕ) : (w.drop n).length = (w.length - n).max 0 := by
+  induction n generalizing w with
+  | zero => simp
+  | succ n IH =>
+    cases w with
+    | nil => simp [drop]
+    | cons x e w =>
+      simp only [drop_cons_succ, cons_length, IH, Nat.sub_succ, Nat.max_zero_left]
+
+lemma drop_eq_nil_of_length_le (h : w.length + 1 ≤ n) : w.drop n = nil w.last := by
+  induction n generalizing w with
+  | zero => simp at h
+  | succ n IH =>
+    cases w with
+    | nil => simp [drop]
+    | cons x e w =>
+      simp only [drop_cons_succ, cons_length] at h ⊢
+      have : w.length + 1 ≤ n := by omega
+      rw [IH _ this, last_cons]
+
+@[simp]
+lemma drop_first (w : WList α β) (n : ℕ) (hn : n ≤ w.length) :
+    (w.drop n).first = w.get n := by
+  induction n generalizing w with
+  | zero => simp [get_zero]
+  | succ n IH =>
+    cases w with
+    | nil => simp [drop] at hn
+    | cons x e w =>
+      simp only [drop_cons_succ, get_cons_add, cons_length, Nat.add_le_add_iff_right] at hn ⊢
+      exact IH _ hn
+
+lemma drop_first_of_length_lt (w : WList α β) (n : ℕ) (h : w.length < n) :
+    (w.drop n).first = w.last := by
+  rw [drop_eq_nil_of_length_le (by omega)]
+
+@[simp]
+lemma drop_last (w : WList α β) (n : ℕ) : (w.drop n).last = w.last := by
+  induction n generalizing w with
+  | zero => simp
+  | succ n IH =>
+    cases w with
+    | nil => simp [drop]
+    | cons => simp [drop_cons_succ, last_cons, IH]
+
+@[simp]
+lemma drop_vertex (w : WList α β) (n : ℕ) : (w.drop n).vertex = w.vertex.drop n := by
+  induction n generalizing w with
+  | zero => simp
+  | succ n IH =>
+    cases w with
+    | nil => simp [drop]
+    | cons x e w =>
+      simp only [drop_cons_succ, cons_vertex, List.drop_succ_cons, IH]
+
+@[simp]
+lemma drop_edge (w : WList α β) (n : ℕ) : (w.drop n).edge = w.edge.drop n := by
+  induction n generalizing w with
+  | zero => simp
+  | succ n IH =>
+    cases w with
+    | nil => simp [drop]
+    | cons x e w =>
+      simp only [drop_cons_succ, cons_edge, List.drop_succ_cons, IH]
+
+@[simp]
+lemma drop_concat (w : WList α β) (e : β) (x : α) (n : ℕ) :
+    (w.concat e x).drop n = if n ≤ w.length then w.drop n else nil x := by
+  split_ifs with h
+  · induction n generalizing w with
+    | zero => simp
+    | succ n IH =>
+      cases w with
+      | nil => simp [drop, concat]
+      | cons u f w =>
+        simp only [drop_cons_succ, cons_concat, cons_length, Nat.add_le_add_iff_right] at h ⊢
+        rw [IH _ h]
+  · rw [drop_eq_nil_of_length_le]
+    simp only [concat_length, not_le] at h
+    omega
+
+@[simp]
+lemma drop_append (w₁ w₂ : WList α β) (n : ℕ) :
+    (w₁ ++ w₂).drop n = if n ≤ w₁.length then w₁.drop n ++ w₂ else w₂.drop (n - w₁.length) := by
+  split_ifs with h
+  · induction n generalizing w₁ with
+    | zero => simp
+    | succ n IH =>
+      cases w₁ with
+      | nil => simp
+      | cons x e w₁ =>
+        simp only [drop_cons_succ, cons_append, cons_length, Nat.add_le_add_iff_right] at h ⊢
+        rw [IH _ h]
+  · induction w₁ generalizing n with
+    | nil => simp
+    | cons x e w₁ ih =>
+      simp only [cons_append, cons_length, drop_cons_succ]
+      have : n > w₁.length + 1 := by omega
+      rw [ih (by omega)]
+      simp [Nat.sub_add_eq]
+
+lemma drop_drop (w : WList α β) (m n : ℕ) : (w.drop n).drop m = w.drop (m + n) := by
+  induction n generalizing m w with
+  | zero => simp
+  | succ n IH =>
+    cases w with
+    | nil => simp [drop]
+    | cons x e w =>
+      simp only [drop_cons_succ, IH, Nat.add_succ]
+
+@[simp]
+lemma take_drop (w : WList α β) (n : ℕ) : w.take n ++ w.drop n = w := by
+  induction n generalizing w with
+  | zero => simp
+  | succ n IH =>
+    cases w with
+    | nil => simp
+    | cons x e w =>
+      simp only [take_cons_succ, drop_cons_succ, cons_append, IH]
+
+lemma take_append_drop (w : WList α β) (m n : ℕ) :
+    w.take m ++ (w.drop m).take n ++ (w.drop m).drop n = w.take (m + n) ++ w.drop (m + n) := by
+  rw [← take_drop (w.drop m) n, append_assoc, take_drop w m, take_drop w (m + n)]
+
+@[simp]
+lemma dropLast_take (w : WList α β) (n : ℕ) (hn : n ≤ w.length) :
+    (w.take n).dropLast = w.take (n - 1) := by
+  induction n generalizing w with
+  | zero => simp
+  | succ n IH =>
+    cases n with
+    | zero => simp
+    | succ n =>
+      cases w with
+      | nil => simp at hn
+      | cons x e w =>
+        simp only [take_cons_succ, dropLast_cons_cons, cons_length, Nat.add_le_add_iff_right] at hn ⊢
+        rw [IH _ hn]
+        simp [Nat.sub_add_eq]
+
+@[simp]
+lemma take_dropLast (w : WList α β) (n : ℕ) (hn : n ≤ w.length) :
+    (w.dropLast).take n = w.take n := by
+  induction n generalizing w with
+  | zero => simp
+  | succ n IH =>
+    cases w with
+    | nil => simp
+    | cons x e w =>
+      cases w with
+      | nil => simp at hn
+      | cons y f w =>
+        simp only [dropLast_cons_cons, take_cons_succ, cons_length, Nat.add_le_add_iff_right] at hn ⊢
+        rw [IH _ hn]
+
+@[simp]
+lemma drop_tail (w : WList α β) : w.drop 1 = w.tail := by
+  cases w with
+  | nil => simp [drop, tail]
+  | cons => simp [drop, tail]
+
+@[simp]
+lemma take_one (w : WList α β) : w.take 1 = nil w.first := by
+  cases w with
+  | nil => simp [take]
+  | cons => simp [take]
+
+lemma take_succ (w : WList α β) (n : ℕ) (hn : n < w.length) :
+    w.take (n + 1) = (w.take n).concat (w.edge[n]) (w.get (n + 1)) := by
+  induction n generalizing w with
+  | zero =>
+    cases w with
+    | nil => simp at hn
+    | cons x e w =>
+      simp only [take_one, take_zero, nil_concat, get_zero, get_cons_add, cons_edge, List.get_zero]
+  | succ n IH =>
+    cases w with
+    | nil => simp at hn
+    | cons x e w =>
+      simp only [take_cons_succ, cons_length, Nat.add_lt_add_iff_right] at hn
+      rw [IH _ hn, drop_first _ _ (by omega), get_cons_add]
+
+lemma drop_length_eq_zero_iff (w : WList α β) (n : ℕ) :
+    (w.drop n).length = 0 ↔ w.length + 1 ≤ n := by
+  constructor
+  · intro h
+    by_contra hlt
+    push_neg at hlt
+    have : (w.drop n).length > 0 := by
+      rw [drop_length]
+      omega
+    omega
+  · intro h
+    rw [drop_eq_nil_of_length_le h, nil_length]
+
+@[simp]
+lemma take_all_of_length_le (w : WList α β) (n : ℕ) (h : w.length + 1 ≤ n) :
+    w.take n = w := by
+  rw [take_eq_self_of_length_le]
+  omega
+
+@[simp]
+lemma drop_all_of_length_le (w : WList α β) (n : ℕ) (h : w.length + 1 ≤ n) :
+    w.drop n = nil w.last :=
+  drop_eq_nil_of_length_le h
+
+lemma take_drop_comm (w : WList α β) (m n : ℕ) :
+    (w.take m).drop n = (w.drop n).take (m - n) := by
+  by_cases h : n ≤ m
+  · induction n generalizing m w with
+    | zero => simp
+    | succ n IH =>
+      cases m with
+      | zero => simp at h
+      | succ m =>
+        cases w with
+        | nil => simp [take, drop]
+        | cons x e w =>
+          simp only [take_cons_succ, drop_cons_succ, cons_length]
+          have : n ≤ m := by omega
+          rw [IH _ this, drop_cons_succ, take_cons_succ]
+          simp [Nat.sub_succ]
+  · have hlt : m < n := by omega
+    rw [Nat.sub_eq_zero_of_le (by omega), take_zero]
+    by_cases hw : m ≤ w.length
+    · have : n > (w.take m).length := by
+        rw [take_length]
+        omega
+      rw [drop_eq_nil_of_length_le (by omega), take_last _ _ hw]
+      simp
+    · have : w.length < m := by omega
+      rw [take_eq_self_of_length_le (by omega), drop_eq_nil_of_length_le]
+      · simp
+      · omega
+
+-- Additional lemmas about take/drop/dropLast interactions can be added here as needed
+
+/-! ### Relationships with prefixUntil and suffixFrom -/
+
+@[simp]
+lemma take_prefixUntilVertex [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    w.take (w.idxOf x) = w.prefixUntilVertex x := by
+  induction w with
+  | nil u =>
+    simp only [mem_nil_iff] at hx
+    subst hx
+    simp [take, prefixUntilVertex, prefixUntil, idxOf_nil]
+  | cons u e w ih =>
+    obtain rfl | hne := eq_or_ne x u
+    · simp [take, prefixUntilVertex, prefixUntil, idxOf_cons_self]
+    · simp only [mem_cons_iff, hne, false_or] at hx
+      simp only [take_cons_succ, prefixUntilVertex_cons_of_ne _ hne.symm, idxOf_cons_ne hne.symm]
+      exact ih hx
+
+lemma take_eq_prefixUntilVertex_of_idxOf [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w)
+    (n : ℕ) (hn : n = w.idxOf x) :
+    w.take n = w.prefixUntilVertex x := by
+  rw [hn, take_prefixUntilVertex hx]
+
+@[simp]
+lemma drop_suffixFromVertex [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    w.drop (w.idxOf x) = w.suffixFromVertex x := by
+  induction w with
+  | nil u =>
+    simp only [mem_nil_iff] at hx
+    subst hx
+    simp [drop, suffixFromVertex, prefixUntil]
+  | cons u e w ih =>
+    obtain rfl | hne := eq_or_ne x u
+    · simp [drop, suffixFromVertex, prefixUntil, idxOf_cons_self]
+    · simp only [mem_cons_iff, hne, false_or] at hx
+      simp only [drop_cons_succ, idxOf_cons_ne hne.symm, suffixFromVertex_cons_of_ne _ hne.symm]
+      exact ih hx
+
+lemma drop_eq_suffixFromVertex_of_idxOf [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w)
+    (n : ℕ) (hn : n = w.idxOf x) :
+    w.drop n = w.suffixFromVertex x := by
+  rw [hn, drop_suffixFromVertex hx]
+
+lemma take_drop_prefixUntilVertex_suffixFromVertex [DecidableEq α] (w : WList α β) (x : α)
+    (hx : x ∈ w) :
+    w.take (w.idxOf x) ++ w.drop (w.idxOf x) = w.prefixUntilVertex x ++ w.suffixFromVertex x := by
+  rw [take_prefixUntilVertex hx, drop_suffixFromVertex hx]
+
+@[simp]
+lemma prefixUntilVertex_take [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) (n : ℕ)
+    (hn : w.idxOf x ≤ n) (hn' : n ≤ w.length) :
+    (w.take n).prefixUntilVertex x = w.prefixUntilVertex x := by
+  rw [take_prefixUntilVertex hx]
+  have : (w.prefixUntilVertex x).length ≤ n := by
+    rw [prefixUntilVertex_length hx]
+    exact hn
+  rw [take_eq_self_of_length_le this]
+
+@[simp]
+lemma suffixFromVertex_drop [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) (n : ℕ)
+    (hn : n ≤ w.idxOf x) :
+    (w.drop n).suffixFromVertex x = w.suffixFromVertex x := by
+  -- When we drop n vertices where n ≤ idxOf x, the suffixFromVertex remains the same
+  -- because x still appears at the same relative position
+  induction n generalizing w with
+  | zero => simp
+  | succ n IH =>
+    cases w with
+    | nil => simp at hx
+    | cons u e w =>
+      have hmem : x ∈ w := by
+        simp only [mem_cons_iff] at hx
+        exact hx.resolve_left (fun heq => by
+          subst heq
+          simp [idxOf_cons_self] at hn)
+      have hne : u ≠ x := by
+        intro heq
+        subst heq
+        simp [idxOf_cons_self] at hn
+      simp only [drop_cons_succ, suffixFromVertex_cons_of_ne _ hne, idxOf_cons_ne hne.symm] at hn ⊢
+      exact IH _ hmem (by omega)
+
+lemma take_prefixUntil [DecidablePred P] (w : WList α β) (h : ∃ u ∈ w, P u) :
+    w.take ((w.prefixUntil P).length) = w.prefixUntil P := by
+  have hpfx := prefixUntil_isPrefix w P
+  rw [take_eq_self_of_length_ge hpfx.length_le]
+
+lemma drop_suffixFrom [DecidablePred P] (w : WList α β) (h : ∃ u ∈ w, P u) :
+    w.drop ((w.length + 1) - (w.suffixFrom P).length) = w.suffixFrom P := by
+  -- This requires more careful calculation of the index
+  sorry
+
+lemma prefixUntil_take [DecidablePred P] (w : WList α β) (n : ℕ) (hn : n ≤ w.length)
+    (h : ∃ u ∈ w.take n, P u) :
+    (w.take n).prefixUntil P = w.prefixUntil P := by
+  have hpfx := prefixUntil_isPrefix w P
+  have hpfx' := prefixUntil_isPrefix (w.take n) P
+  refine hpfx'.eq_of_length_ge ?_
+  rw [hpfx.length_le, take_length]
+  omega
+
+lemma suffixFrom_drop [DecidablePred P] (w : WList α β) (n : ℕ) (hn : n ≤ w.length)
+    (h : ∃ u ∈ w.drop n, P u) :
+    (w.drop n).suffixFrom P = w.suffixFrom P := by
+  -- This requires showing that the first occurrence of P in w.drop n is the same as in w
+  sorry
+
+@[simp]
+lemma dropLast_prefixUntil [DecidablePred P] (w : WList α β) (hne : w.Nonempty)
+    (h : ∃ u ∈ w.dropLast, P u) :
+    (w.dropLast).prefixUntil P = w.prefixUntil P := by
+  have hpfx := prefixUntil_isPrefix w P
+  have hpfx' := prefixUntil_isPrefix w.dropLast P
+  refine hpfx'.eq_of_length_ge ?_
+  rw [hpfx.length_le, dropLast_length]
+  omega
+
+@[simp]
+lemma dropLast_suffixFrom [DecidablePred P] (w : WList α β) (hne : w.Nonempty)
+    (h : ∃ u ∈ w.dropLast, P u) :
+    (w.dropLast).suffixFrom P = w.suffixFrom P := by
+  -- This requires more careful handling
+  sorry
+
+@[simp]
+lemma prefixUntilVertex_dropLast [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w.dropLast)
+    (hne : w.Nonempty) :
+    (w.dropLast).prefixUntilVertex x = w.prefixUntilVertex x := by
+  have hxw : x ∈ w := by
+    rw [mem_iff_eq_mem_dropLast_or_eq_last] at hx
+    exact hx.elim id (fun heq => heq ▸ last_mem)
+  rw [← take_prefixUntilVertex hxw, ← take_prefixUntilVertex hx]
+  rw [take_dropLast]
+  exact hne.length_pos.le
+
+@[simp]
+lemma suffixFromVertex_dropLast [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w.dropLast)
+    (hne : w.Nonempty) :
+    (w.dropLast).suffixFromVertex x = w.suffixFromVertex x := by
+  -- This requires showing the index is the same
+  sorry
+
+lemma take_length_prefixUntilVertex [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    w.take (w.prefixUntilVertex x).length = w.prefixUntilVertex x := by
+  rw [prefixUntilVertex_length hx, take_prefixUntilVertex hx]
+
+lemma drop_length_suffixFromVertex [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    w.drop (w.idxOf x) = w.suffixFromVertex x :=
+  drop_suffixFromVertex hx
+
+lemma prefixUntilVertex_eq_take_idxOf [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    w.prefixUntilVertex x = w.take (w.idxOf x) :=
+  (take_prefixUntilVertex hx).symm
+
+lemma suffixFromVertex_eq_drop_idxOf [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    w.suffixFromVertex x = w.drop (w.idxOf x) :=
+  (drop_suffixFromVertex hx).symm
 
 lemma idxOf_eq_length_prefixUntilVertex [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
     w.idxOf x = (w.prefixUntilVertex x).length := by
@@ -1661,6 +2233,31 @@ lemma idxOf_eq_length_prefixUntilVertex [DecidableEq α] (w : WList α β) (x : 
   simp only [hx, prefixUntilVertex, forall_const, ne_eq, hu.symm, not_false_eq_true, idxOf_cons_ne,
     prefixUntil_cons, ↓reduceIte, cons_length, Nat.add_right_cancel_iff] at ih ⊢
   assumption
+
+lemma take_n_eq_prefixUntilVertex_get [DecidableEq α] (w : WList α β) (n : ℕ) (hn : n ≤ w.length)
+    (hnd : w.vertex.Nodup) :
+    w.take n = w.prefixUntilVertex (w.get n) := by
+  rw [take_prefixUntilVertex (get_mem _ _), idxOf_get hnd hn]
+
+lemma drop_n_eq_suffixFromVertex_get [DecidableEq α] (w : WList α β) (n : ℕ) (hn : n ≤ w.length)
+    (hnd : w.vertex.Nodup) :
+    w.drop n = w.suffixFromVertex (w.get n) := by
+  rw [drop_suffixFromVertex (get_mem _ _), idxOf_get hnd hn]
+
+lemma prefixUntilVertex_append_suffixFromVertex_eq_take_drop [DecidableEq α] (w : WList α β)
+    (x : α) (hx : x ∈ w) :
+    w.prefixUntilVertex x ++ w.suffixFromVertex x = w.take (w.idxOf x) ++ w.drop (w.idxOf x) := by
+  rw [take_prefixUntilVertex hx, drop_suffixFromVertex hx]
+
+@[simp]
+lemma take_prefixUntilVertex_length [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    (w.prefixUntilVertex x).length = (w.take (w.idxOf x)).length := by
+  rw [take_prefixUntilVertex hx]
+
+@[simp]
+lemma drop_suffixFromVertex_length [DecidableEq α] (w : WList α β) (x : α) (hx : x ∈ w) :
+    (w.suffixFromVertex x).length = (w.drop (w.idxOf x)).length := by
+  rw [drop_suffixFromVertex hx]
 
 end drop
 
