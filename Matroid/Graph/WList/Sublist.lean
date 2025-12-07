@@ -1775,9 +1775,43 @@ lemma take_take (w : WList α β) (m n : ℕ) : (w.take n).take m = w.take (min 
 
 @[simp]
 lemma take_reverse (w : WList α β) (n : ℕ) :
-    (w.reverse).take n = (w.dropLast (w.length - n)).reverse := by
-  -- This lemma requires more careful handling with length bounds
-  sorry
+    (w.reverse).take n = (w.drop ((w.length + 1) - n)).reverse := by
+  by_cases h : n ≤ w.length + 1
+  · induction n generalizing w with
+    | zero =>
+      simp only [take_zero, reverse_first]
+      have : (w.length + 1) - 0 = w.length + 1 := rfl
+      rw [this]
+      rw [drop_eq_nil_of_length_le (by omega), reverse_nil]
+    | succ n IH =>
+      cases w with
+      | nil x =>
+        simp only [reverse_nil, take_nil, nil_length, drop_nil, reverse_nil]
+      | cons x e w =>
+        simp only [reverse_cons, take_cons_succ, cons_length]
+        by_cases hn : n ≤ w.length + 1
+        · rw [IH _ hn]
+          simp only [reverse_cons, cons_length]
+          congr 1
+          have : (cons x e w).length + 1 - (n + 1) = w.length + 1 - n := by
+            simp only [cons_length]
+            omega
+          rw [this, drop_cons_succ]
+        · have : w.length + 1 < n := by omega
+          have hsub1 : (cons x e w).length + 1 - (n + 1) = 0 := by
+            simp only [cons_length]
+            omega
+          have hsub2 : w.length + 1 - n = 0 := by omega
+          simp [hsub1, hsub2, drop_zero, reverse_cons]
+          rw [take_eq_self_of_length_le]
+          simp only [reverse_length, cons_length] at h
+          omega
+  · have : w.length + 1 ≤ n := by omega
+    have hsub : (w.length + 1) - n = 0 := by omega
+    simp [hsub, drop_zero]
+    rw [take_eq_self_of_length_le, reverse_reverse]
+    simp only [reverse_length] at this
+    omega
 
 /-- Drop the first `n` vertices from a `WList`. Returns `nil w.last` if `n ≥ w.length + 1`. -/
 def drop : WList α β → ℕ → WList α β
@@ -1918,8 +1952,7 @@ lemma take_drop (w : WList α β) (n : ℕ) : w.take n ++ w.drop n = w := by
 
 lemma take_append_drop (w : WList α β) (m n : ℕ) :
     w.take m ++ (w.drop m).take n ++ (w.drop m).drop n = w.take (m + n) ++ w.drop (m + n) := by
-  -- This lemma requires more careful handling of the conditional cases
-  sorry
+  rw [← take_drop (w.drop m) n, append_assoc, take_drop w m, take_drop w (m + n)]
 
 @[simp]
 lemma dropLast_take (w : WList α β) (n : ℕ) (hn : n ≤ w.length) :
@@ -2005,8 +2038,32 @@ lemma drop_all_of_length_le (w : WList α β) (n : ℕ) (h : w.length + 1 ≤ n)
 
 lemma take_drop_comm (w : WList α β) (m n : ℕ) :
     (w.take m).drop n = (w.drop n).take (m - n) := by
-  -- This requires careful handling of the subtraction
-  sorry
+  by_cases h : n ≤ m
+  · induction n generalizing m w with
+    | zero => simp
+    | succ n IH =>
+      cases m with
+      | zero => simp at h
+      | succ m =>
+        cases w with
+        | nil => simp [take, drop]
+        | cons x e w =>
+          simp only [take_cons_succ, drop_cons_succ, cons_length]
+          have : n ≤ m := by omega
+          rw [IH _ this, drop_cons_succ, take_cons_succ]
+          simp [Nat.sub_succ]
+  · have hlt : m < n := by omega
+    rw [Nat.sub_eq_zero_of_le (by omega), take_zero]
+    by_cases hw : m ≤ w.length
+    · have : n > (w.take m).length := by
+        rw [take_length]
+        omega
+      rw [drop_eq_nil_of_length_le (by omega), take_last _ _ hw]
+      simp
+    · have : w.length < m := by omega
+      rw [take_eq_self_of_length_le (by omega), drop_eq_nil_of_length_le]
+      · simp
+      · omega
 
 -- Additional lemmas about take/drop/dropLast interactions can be added here as needed
 
