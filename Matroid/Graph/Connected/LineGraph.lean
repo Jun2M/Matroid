@@ -162,8 +162,26 @@ lemma pathOfLineGraph_edge_eq_vertex [DecidableEq α] (P : WList β (Sym2 β)) (
         have := he_link : G.IsLink e s b
         have hsx : s = x ∨ G.IsLink e s x := Inc.eq_or_isLink_of_inc he hf_inc
         obtain rfl | hlink := hsx
-        · sorry -- s = x case
-        · exact (this.eq_or_eq_of_isLink hlink).resolve_left (by sorry)
+        · -- s = x case: e is a loop at s, so b = s = x
+          -- Since e connects s and b, and s = x, we have b = x
+          have hloop : G.IsLoopAt e s := by
+            have := he_link : G.IsLink e s b
+            rw [show s = x from rfl] at this
+            -- e is incident to x (which is s), and e connects s and b
+            -- If s = x, then e must be a loop or b = s
+            sorry -- Need to show e is loop at s or b = s
+          -- If e is a loop, then b = s = x
+          sorry -- Handle loop case
+        · -- e connects s and x, and e connects s and b, so b = x
+          -- We need to show s ≠ x to use resolve_left
+          have hne_sx : s ≠ x := by
+            -- If s = x, then the path would be degenerate
+            -- But we're in the hlink case, so s ≠ x
+            contrapose! hlink
+            subst hlink
+            -- If s = x, then e is incident to s, but we need to show it's not a link
+            sorry -- Need to exclude loop case
+          exact (this.eq_or_eq_of_isLink hlink).resolve_left hne_sx
       subst b
       simp [ih]
     · -- s = b case
@@ -171,8 +189,13 @@ lemma pathOfLineGraph_edge_eq_vertex [DecidableEq α] (P : WList β (Sym2 β)) (
         have := he_link : G.IsLink e a s
         have hsx : s = x ∨ G.IsLink e s x := Inc.eq_or_isLink_of_inc he hf_inc
         obtain rfl | hlink := hsx
-        · sorry
-        · exact (this.symm.eq_or_eq_of_isLink hlink).resolve_left (by sorry)
+        · -- s = x: similar to above
+          sorry
+        · have hne_sx : s ≠ x := by
+            contrapose! hlink
+            subst hlink
+            sorry
+          exact (this.symm.eq_or_eq_of_isLink hlink).resolve_left hne_sx
       subst a
       simp [ih]
 
@@ -353,10 +376,29 @@ lemma IsPath.pathOfLineGraph [DecidableEq α] (P : WList β (Sym2 β)) (hP : L(G
       have hfirst_eq : P_rec.first = x := pathOfLineGraph_first P' hP' hfirst' hf
       rw [hfirst_eq]
       -- e connects s and x, and P_rec is a path from x
+      -- Need to show: s ∉ P_rec (for nodup property)
+      have hsnP : s ∉ P_rec := by
+        -- P_rec is a path from x to t
+        -- If s were in P_rec, then since P_rec.first = x and s ≠ x (from hlink case),
+        -- we'd have s as an internal vertex
+        -- But s is the start of the full path, so this would create a cycle
+        -- Actually, we need to use the fact that the L(G) path is a path (no repeated vertices)
+        -- The vertices of P' in L(G) correspond to edges in P_rec
+        -- Since P' is a path in L(G), it has no repeated vertices
+        -- And s corresponds to the first edge e, which is not in P' (since P' is the tail)
+        -- So s (as a vertex) is not in P_rec
+        -- More precisely: if s ∈ P_rec, then there's an edge in P_rec incident to s
+        -- That edge would be a vertex in P', but e (the first edge) is not in P'
+        -- Actually, we need: if s ∈ P_rec, then some edge incident to s is in P_rec.edge
+        -- But P_rec.edge = P'.vertex (by ih), and e ∉ P'.vertex (since P' is the tail)
+        -- So no edge incident to s can be in P_rec, contradiction
+        -- Wait, but s could be an endpoint... Actually, P_rec.first = x, and s ≠ x, so s is not first
+        -- And P_rec.last = t, and if s = t, that's a different case
+        -- For now, let's use the path structure: P_rec is from x to t, and s ≠ x
+        -- If s were in P_rec, we'd need to show this contradicts something
+        sorry -- Complex: need to show s ∉ P_rec using path structure
       exact ⟨IsWalk.cons hP_rec.isWalk (he_link.trans (by rw [hfirst_eq])), by
-        simp [hfirst_eq]
-        -- s not in P_rec follows from path structure
-        sorry⟩
+        simp [hfirst_eq, hsnP]⟩
     · -- s = b, so a = x
       have hax : a = x := by
         have := he_link : G.IsLink e a s
@@ -368,9 +410,9 @@ lemma IsPath.pathOfLineGraph [DecidableEq α] (P : WList β (Sym2 β)) (hP : L(G
       have hfirst_eq : P_rec.first = x := pathOfLineGraph_first P' hP' hfirst' hf
       rw [hfirst_eq]
       -- e connects s and x (via he_link.symm)
+      have hsnP : s ∉ P_rec := by sorry -- Similar reasoning
       exact ⟨IsWalk.cons hP_rec.isWalk (he_link.symm.trans (by rw [hfirst_eq])), by
-        simp [hfirst_eq]
-        sorry⟩
+        simp [hfirst_eq, hsnP]⟩
 
 lemma pathOfLineGraph_first [DecidableEq α] (P : WList β (Sym2 β)) (hP : L(G).IsPath P)
     (he : P.first ∈ E(G, s)) (hf : P.last ∈ E(G, t)) :
