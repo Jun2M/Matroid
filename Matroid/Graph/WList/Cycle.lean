@@ -327,7 +327,7 @@ lemma rotate_first_eq_drop_first (w : WList α β) (n : ℕ) (hn : n ≤ w.lengt
 lemma IsClosed.rotate_eq_drop_append_take (hw : w.IsClosed) (n : ℕ) :
     w.rotate n = w.drop (n % w.length) ++ w.take (n % w.length) := by
   obtain ⟨x, rfl⟩ | hne := w.exists_eq_nil_or_nonempty
-  · simp [intRotate]
+  · simp [rotate_nil]
   rw [hw.rotate_eq_mod]
   exact IsClosed.rotate_take_drop hw _ (Nat.mod_lt _ hne.length_pos).le
 
@@ -346,50 +346,27 @@ lemma IsClosed.rotate_take_drop (hw : w.IsClosed) (n : ℕ) (hn : n ≤ w.length
   rw [rotate_eq_append h1 h2]
   simp [take_length, min_eq_left hn]
 
-lemma rotate_take_drop_general (w : WList α β) (n : ℕ) (hn : n ≤ w.length) :
-    w.rotate n = w.drop n ++ w.take n := by
-  -- General relationship: rotate n = drop n ++ take n
-  -- This holds when the list can be "wrapped around"
-  induction n generalizing w with
-  | zero =>
-    simp [rotate_zero, drop_zero]
-    cases w with
-    | nil => simp [take]
-    | cons => simp [take]
-  | succ n IH =>
-    cases w with
-    | nil => simp [rotate_nil, drop_nil, take_nil]
-    | cons x e w =>
-      simp only [rotate_cons_succ, drop_cons_succ, take_cons_succ, cons_append, cons_length,
-        Nat.add_le_add_iff_right] at hn ⊢
-      -- The key insight: (w.concat e w.first).rotate n should equal
-      -- (w.concat e w.first).drop n ++ (w.concat e w.first).take n
-      -- But this requires understanding how concat interacts with drop/take
-      sorry
+-- Note: The general relationship `w.rotate n = w.drop n ++ w.take n` requires `w.IsClosed`
+-- because rotate is designed for closed lists. See `IsClosed.rotate_take_drop` for the
+-- proven version with the closed assumption.
 
-@[simp]
-lemma rotate_take (w : WList α β) (n m : ℕ) (hn : n ≤ w.length) :
+lemma rotate_take (hw : w.IsClosed) (n m : ℕ) (hn : n ≤ w.length) :
     (w.rotate n).take m = if m ≤ (w.drop n).length then (w.drop n).take m
     else w.drop n ++ (w.take n).take (m - (w.drop n).length) := by
-  rw [IsClosed.rotate_eq_drop_append_take]
-  · rw [take_append]
-    split_ifs with h
-    · simp
-    · simp [Nat.sub_add_cancel (by omega)]
-  · -- Need closed assumption
-    sorry
+  rw [IsClosed.rotate_take_drop hw hn]
+  rw [take_append]
+  split_ifs with h
+  · simp
+  · simp [Nat.sub_add_cancel (by omega)]
 
-@[simp]
-lemma rotate_drop (w : WList α β) (n m : ℕ) (hn : n ≤ w.length) :
+lemma rotate_drop (hw : w.IsClosed) (n m : ℕ) (hn : n ≤ w.length) :
     (w.rotate n).drop m = if m ≤ (w.drop n).length then (w.drop n).drop m ++ w.take n
     else (w.take n).drop (m - (w.drop n).length) := by
-  rw [IsClosed.rotate_eq_drop_append_take]
-  · rw [drop_append]
-    split_ifs with h
-    · simp
-    · simp [Nat.sub_add_cancel (by omega)]
-  · -- Need closed assumption
-    sorry
+  rw [IsClosed.rotate_take_drop hw hn]
+  rw [drop_append]
+  split_ifs with h
+  · simp
+  · simp [Nat.sub_add_cancel (by omega)]
 
 lemma rotate_last_eq_take_last (hw : w.IsClosed) (n : ℕ) (hn : n ≤ w.length) :
     (w.rotate n).last = (w.take n).last := by
