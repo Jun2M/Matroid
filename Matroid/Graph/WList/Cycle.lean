@@ -328,23 +328,13 @@ lemma IsClosed.rotate_eq_drop_append_take (hw : w.IsClosed) (n : ℕ) :
     w.rotate n = w.drop (n % w.length) ++ w.take (n % w.length) := by
   obtain ⟨x, rfl⟩ | hne := w.exists_eq_nil_or_nonempty
   · simp [rotate_nil]
-  rw [hw.rotate_eq_mod]
-  exact IsClosed.rotate_take_drop hw _ (Nat.mod_lt _ hne.length_pos).le
+  rw [hw.rotate_eq_mod, IsClosed.rotate_take_drop hw _ (Nat.mod_lt _ hne.length_pos).le]
 
 lemma IsClosed.rotate_take_drop (hw : w.IsClosed) (n : ℕ) (hn : n ≤ w.length) :
     w.rotate n = w.drop n ++ w.take n := by
-  -- Use take_drop decomposition: w = w.take n ++ w.drop n
-  -- For a closed list, rotating by n should give w.drop n ++ w.take n
-  have h1 : (w.take n).last = (w.drop n).first := by
-    rw [take_last _ _ hn, drop_first _ _ hn]
-  have h2 : (w.take n).first = (w.drop n).last := by
-    rw [take_first, drop_last, hw]
-  -- Now use rotate_eq_append
-  have h_append : w = w.take n ++ w.drop n := take_drop w n
-  rw [← h_append] at hw ⊢
-  -- We need to show (w.take n ++ w.drop n).rotate (w.take n).length = w.drop n ++ w.take n
-  rw [rotate_eq_append h1 h2]
-  simp [take_length, min_eq_left hn]
+  rw [← take_drop w n] at hw ⊢
+  rw [rotate_eq_append (by rw [take_last _ _ hn, drop_first _ _ hn])
+    (by rw [take_first, drop_last, hw]), take_length, min_eq_left hn]
 
 -- Note: The general relationship `w.rotate n = w.drop n ++ w.take n` requires `w.IsClosed`
 -- because rotate is designed for closed lists. See `IsClosed.rotate_take_drop` for the
@@ -353,25 +343,18 @@ lemma IsClosed.rotate_take_drop (hw : w.IsClosed) (n : ℕ) (hn : n ≤ w.length
 lemma rotate_take (hw : w.IsClosed) (n m : ℕ) (hn : n ≤ w.length) :
     (w.rotate n).take m = if m ≤ (w.drop n).length then (w.drop n).take m
     else w.drop n ++ (w.take n).take (m - (w.drop n).length) := by
-  rw [IsClosed.rotate_take_drop hw hn]
-  rw [take_append]
-  split_ifs with h
-  · simp
-  · simp [Nat.sub_add_cancel (by omega)]
+  rw [IsClosed.rotate_take_drop hw hn, take_append]
+  split_ifs <;> simp [Nat.sub_add_cancel (by omega)]
 
 lemma rotate_drop (hw : w.IsClosed) (n m : ℕ) (hn : n ≤ w.length) :
     (w.rotate n).drop m = if m ≤ (w.drop n).length then (w.drop n).drop m ++ w.take n
     else (w.take n).drop (m - (w.drop n).length) := by
-  rw [IsClosed.rotate_take_drop hw hn]
-  rw [drop_append]
-  split_ifs with h
-  · simp
-  · simp [Nat.sub_add_cancel (by omega)]
+  rw [IsClosed.rotate_take_drop hw hn, drop_append]
+  split_ifs <;> simp [Nat.sub_add_cancel (by omega)]
 
 lemma rotate_last_eq_take_last (hw : w.IsClosed) (n : ℕ) (hn : n ≤ w.length) :
     (w.rotate n).last = (w.take n).last := by
-  rw [IsClosed.rotate_take_drop hw hn, append_last]
-  simp
+  rw [IsClosed.rotate_take_drop hw hn, append_last, drop_last]
 
 -- theorem WList.IsSuffix.exists_isPrefix_rotate.extracted_1_5  (w₁ w₂ : WList α β)
 --     (hne : w₂.Nonempty) (n : ℕ) (hn : n ≤ w₂.length) (hpfx : w₁.IsPrefix (w₂.rotate n)) :
