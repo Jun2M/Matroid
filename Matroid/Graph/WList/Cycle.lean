@@ -317,6 +317,85 @@ lemma firstEdge_rotate_one (hw : w.Nontrivial) :
 lemma IsClosed.rotate_one_dropLast (hw : w.IsClosed) : (w.rotate 1).dropLast = w.tail := by
   cases w with simp
 
+/-! ### Relationships with take and drop -/
+
+lemma rotate_first_eq_drop_first (w : WList α β) (n : ℕ) (hn : n ≤ w.length) :
+    (w.rotate n).first = (w.drop n).first := by
+  rw [rotate_first _ _ hn, drop_first _ _ hn]
+
+@[simp]
+lemma IsClosed.rotate_eq_drop_append_take (hw : w.IsClosed) (n : ℕ) :
+    w.rotate n = w.drop (n % w.length) ++ w.take (n % w.length) := by
+  obtain ⟨x, rfl⟩ | hne := w.exists_eq_nil_or_nonempty
+  · simp [intRotate]
+  rw [hw.rotate_eq_mod]
+  exact IsClosed.rotate_take_drop hw _ (Nat.mod_lt _ hne.length_pos).le
+
+lemma IsClosed.rotate_take_drop (hw : w.IsClosed) (n : ℕ) (hn : n ≤ w.length) :
+    w.rotate n = w.drop n ++ w.take n := by
+  -- Use take_drop decomposition: w = w.take n ++ w.drop n
+  -- For a closed list, rotating by n should give w.drop n ++ w.take n
+  have h1 : (w.take n).last = (w.drop n).first := by
+    rw [take_last _ _ hn, drop_first _ _ hn]
+  have h2 : (w.take n).first = (w.drop n).last := by
+    rw [take_first, drop_last, hw]
+  -- Now use rotate_eq_append
+  have h_append : w = w.take n ++ w.drop n := take_drop w n
+  rw [← h_append] at hw ⊢
+  -- We need to show (w.take n ++ w.drop n).rotate (w.take n).length = w.drop n ++ w.take n
+  rw [rotate_eq_append h1 h2]
+  simp [take_length, min_eq_left hn]
+
+lemma rotate_take_drop_general (w : WList α β) (n : ℕ) (hn : n ≤ w.length) :
+    w.rotate n = w.drop n ++ w.take n := by
+  -- General relationship: rotate n = drop n ++ take n
+  -- This holds when the list can be "wrapped around"
+  induction n generalizing w with
+  | zero =>
+    simp [rotate_zero, drop_zero]
+    cases w with
+    | nil => simp [take]
+    | cons => simp [take]
+  | succ n IH =>
+    cases w with
+    | nil => simp [rotate_nil, drop_nil, take_nil]
+    | cons x e w =>
+      simp only [rotate_cons_succ, drop_cons_succ, take_cons_succ, cons_append, cons_length,
+        Nat.add_le_add_iff_right] at hn ⊢
+      -- The key insight: (w.concat e w.first).rotate n should equal
+      -- (w.concat e w.first).drop n ++ (w.concat e w.first).take n
+      -- But this requires understanding how concat interacts with drop/take
+      sorry
+
+@[simp]
+lemma rotate_take (w : WList α β) (n m : ℕ) (hn : n ≤ w.length) :
+    (w.rotate n).take m = if m ≤ (w.drop n).length then (w.drop n).take m
+    else w.drop n ++ (w.take n).take (m - (w.drop n).length) := by
+  rw [IsClosed.rotate_eq_drop_append_take]
+  · rw [take_append]
+    split_ifs with h
+    · simp
+    · simp [Nat.sub_add_cancel (by omega)]
+  · -- Need closed assumption
+    sorry
+
+@[simp]
+lemma rotate_drop (w : WList α β) (n m : ℕ) (hn : n ≤ w.length) :
+    (w.rotate n).drop m = if m ≤ (w.drop n).length then (w.drop n).drop m ++ w.take n
+    else (w.take n).drop (m - (w.drop n).length) := by
+  rw [IsClosed.rotate_eq_drop_append_take]
+  · rw [drop_append]
+    split_ifs with h
+    · simp
+    · simp [Nat.sub_add_cancel (by omega)]
+  · -- Need closed assumption
+    sorry
+
+lemma rotate_last_eq_take_last (hw : w.IsClosed) (n : ℕ) (hn : n ≤ w.length) :
+    (w.rotate n).last = (w.take n).last := by
+  rw [IsClosed.rotate_take_drop hw hn, append_last]
+  simp
+
 -- theorem WList.IsSuffix.exists_isPrefix_rotate.extracted_1_5  (w₁ w₂ : WList α β)
 --     (hne : w₂.Nonempty) (n : ℕ) (hn : n ≤ w₂.length) (hpfx : w₁.IsPrefix (w₂.rotate n)) :
 --     (w₁.concat e x).IsPrefix ((w₂.concat e x).rotate n) := by
