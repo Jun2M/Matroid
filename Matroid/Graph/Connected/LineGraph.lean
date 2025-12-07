@@ -92,6 +92,27 @@ lemma lineGraph_pathMap_first {P} (hP : G.IsPath P) (hne : P.Nonempty) :
   | cons x e w =>
     simp [lineGraph_pathMap, Nonempty.firstEdge_cons]
 
+-- Helper lemma: vertex set of lineGraph_pathMap equals edge set of original path
+lemma lineGraph_pathMap_vertex_eq_edge {P} (hP : G.IsPath P) (hne : P.Nonempty) :
+    (lineGraph_pathMap P hP hne).vertex = P.edge := by
+  cases P with
+  | nil => 
+    simp [lineGraph_pathMap]
+    have ⟨e, he⟩ := hne.edgeSet_nonempty
+    simp [he]
+  | cons x e w =>
+    cases w with
+    | nil => simp [lineGraph_pathMap, cons_edge]
+    | cons y f w' =>
+      simp [lineGraph_pathMap, cons_vertex, cons_edge]
+      have hw : G.IsPath (cons y f w') := by
+        simp only [cons_isPath_iff] at hP ⊢
+        exact ⟨hP.2.1, hP.2.2⟩
+      have hne' : (cons y f w').Nonempty := ⟨y, by simp⟩
+      have ih := lineGraph_pathMap_vertex_eq_edge hw hne'
+      rw [ih]
+      simp [List.cons_append]
+
 lemma lineGraph_pathMap_last {P} (hP : G.IsPath P) (hne : P.Nonempty) :
     (lineGraph_pathMap P hP hne).last = hne.lastEdge := by
   cases P with
@@ -124,47 +145,78 @@ def pathOfLineGraph [DecidableEq α] (P : WList β (Sym2 β)) (hP : L(G).IsPath 
     (he : P.first ∈ E(G, s)) (hf : P.last ∈ E(G, t)) : WList α β :=
   match P with
   | nil e =>
-    -- Single edge e incident to s (and must also be incident to t since it's the last)
+    -- Single edge e incident to both s and t
     have ⟨x, y, he'⟩ := exists_isLink_of_mem_edgeSet (by simpa using he)
-    -- One of x, y is s, the other is t
-    by_cases hsx : x = s
-    · subst x
-      exact cons s e (nil y)
-    · -- Then y = s
-      have hyt : y = t := by
-        -- Since e is also incident to t and e connects x and y, and x ≠ s, we must have y = t
-        sorry
-      subst y
-      exact cons t e (nil x)
+    -- Since e ∈ E(G, s) and e ∈ E(G, t), and e connects x and y, we have {s, t} = {x, y}
+      have hst : s = x ∧ t = y ∨ s = y ∧ t = x := by
+        -- e is incident to s, so s ∈ {x, y}
+        have hs_xy : s = x ∨ s = y := by
+          have := he' : G.IsLink e x y
+          exact (this.left_mem.eq_or_eq_of_inc he).imp id (this.right_mem.eq_or_eq_of_inc he)
+        -- e is also incident to t (from hf)
+        have ht_inc : G.Inc e t := by simpa [mem_incEdges_iff] using hf
+        have ht_xy : t = x ∨ t = y := by
+          have := he' : G.IsLink e x y
+          exact (this.left_mem.eq_or_eq_of_inc ht_inc).imp id (this.right_mem.eq_or_eq_of_inc ht_inc)
+        -- Combine: if s = x then t = y, if s = y then t = x
+        obtain (rfl | rfl) := hs_xy
+        · obtain (rfl | rfl) := ht_xy
+          · -- s = x, t = x means s = t - handle separately
+            sorry
+          · exact Or.inl ⟨rfl, rfl⟩
+        · obtain (rfl | rfl) := ht_xy
+          · exact Or.inr ⟨rfl, rfl⟩
+          · -- s = y, t = y means s = t
+            sorry
+    obtain (⟨rfl, rfl⟩ | ⟨rfl, rfl⟩) := hst
+    · exact cons s e (nil t)
+    · exact cons t e (nil s)
   | cons e s_edge P' =>
     have hP' : L(G).IsPath P' := by simpa using hP.of_cons
     -- e is the first edge, incident to s
-    -- s_edge is the Sym2 edge connecting e to P'.first
-    -- P' is the rest
+    -- e and P'.first are adjacent (share a vertex x)
     have hadj : L(G).Adj e P'.first := by
-      -- e and P'.first are connected by s_edge
       have := hP.1
       simp [cons_isWalk_iff] at this
       exact this.1
     simp [lineGraph_adj_iff] at hadj
     obtain ⟨x, he_inc, hf_inc⟩ := hadj
-    -- e is incident to x, P'.first is incident to x
-    -- e is also incident to s (since e ∈ E(G, s))
+    -- e is incident to both s and x
+    -- Determine which endpoint of e is s
     have ⟨a, b, he_link⟩ := exists_isLink_of_mem_edgeSet (by simpa using he)
-    -- One of a, b is s, the other is x (the shared vertex)
-    have hf' : P'.last ∈ E(G, t) := hf  -- If P' is the whole path, its last is the last
-    have P_rec := pathOfLineGraph P' hP' (by sorry) hf'
-    -- Determine which vertex to use
-    by_cases ha : a = s
-    · subst a
-      -- Then b = x (the shared vertex)
-      have hbx : b = x := by sorry
+    -- One of a, b is s, the other is x
+    have hs_ab : s = a ∨ s = b := by
+      have := he_link : G.IsLink e a b
+      exact (this.left_mem.eq_or_eq_of_inc he_inc).imp id (this.right_mem.eq_or_eq_of_inc he_inc)
+    -- P'.first is incident to x, so we can recurse
+    have hf' : P'.last ∈ E(G, t) := hf
+    have hfirst' : P'.first ∈ E(G, x) := by
+      simp [mem_incEdges_iff]
+      use x
+      exact ⟨hf_inc, by simpa using hP'.first_mem⟩
+    have P_rec := pathOfLineGraph P' hP' hfirst' hf'
+    -- Build the full path: s --e--> x --P'--> t
+    obtain (rfl | rfl) := hs_ab
+    · -- s = a, so b = x (the shared vertex)
+      have hbx : b = x := by
+        -- Since e connects a and b where a = s, and e is incident to x, we have b = x
+        -- This follows from the fact that e is incident to both s and x, and e connects s and b
+        have := he_link : G.IsLink e s b
+        have hsx : s = x ∨ G.IsLink e s x := Inc.eq_or_isLink_of_inc he hf_inc
+        obtain rfl | hlink := hsx
+        · -- s = x, but then the path would be trivial (e connects s to itself)
+          sorry -- Need to handle or exclude this case
+        · -- e connects s and x, and e connects s and b, so b = x
+          exact (this.eq_or_eq_of_isLink hlink).resolve_left (by sorry)
       subst b
       exact cons s e P_rec
-    · -- Then b = s
-      have hbs : b = s := by sorry
-      subst b
-      have hax : a = x := by sorry
+    · -- s = b, so a = x
+      have hax : a = x := by
+        have := he_link : G.IsLink e a s
+        have hsx : s = x ∨ G.IsLink e s x := Inc.eq_or_isLink_of_inc he hf_inc
+        obtain rfl | hlink := hsx
+        · sorry
+        · exact (this.symm.eq_or_eq_of_isLink hlink).resolve_left (by sorry)
       subst a
       exact cons s e P_rec
 
@@ -236,6 +288,7 @@ def vertexEnsembleOfSetEnsemble [DecidableEq α] (A : L(G).SetEnsemble)
     ext x
     simp only [mem_inter_iff, mem_vertexSet_iff]
     -- If paths share a vertex in G, they must share an edge, which contradicts vertex-disjointness in L(G)
+    -- This follows from the fact that vertices in L(G) are edges in G
     sorry -- TODO: Show vertex-disjoint in L(G) implies edge-disjoint in G
 
 lemma vertexEnsembleOfSetEnsemble_edgeDisjoint [DecidableEq α] (A : L(G).SetEnsemble)
@@ -245,8 +298,31 @@ lemma vertexEnsembleOfSetEnsemble_edgeDisjoint [DecidableEq α] (A : L(G).SetEns
   -- Paths in L(G) are vertex-disjoint (they share no edges as vertices)
   -- This means the corresponding paths in G are edge-disjoint
   have hdj := A.disjoint P.prop Q.prop hne
-  -- Convert to edge-disjointness in G
-  sorry -- TODO: Show vertex-disjoint in L(G) implies edge-disjoint in G
+  -- The paths in L(G) are vertex-disjoint, meaning they share no vertices
+  -- Since vertices in L(G) are edges in G, this means the paths in G share no edges
+  -- So they are edge-disjoint
+  ext e
+  simp only [mem_inter_iff, mem_edgeSet_iff]
+  constructor
+    · intro ⟨heP, heQ⟩
+      -- e appears in both paths in G
+      -- The line graph paths are the images of these paths under lineGraph_pathMap
+      -- e is a vertex in both L(G) paths (since it's an edge in both G paths)
+      -- But paths in L(G) are vertex-disjoint, contradiction
+      have hP := vertexEnsembleOfSetEnsemble A hA
+      have hQ := vertexEnsembleOfSetEnsemble A hA
+      -- e is in the edge set of both reconstructed paths
+      -- By lineGraph_pathMap_vertex_eq_edge, e is in the vertex set of both L(G) paths
+      have heP' : e ∈ P.vertex := by
+        -- P is a path in L(G), and we need to show e is in its vertex set
+        -- This follows from the fact that pathOfLineGraph reconstructs the path
+        sorry -- Need inverse relationship: edge set of pathOfLineGraph equals vertex set of L(G) path
+      have heQ' : e ∈ Q.vertex := by sorry
+      -- But paths are vertex-disjoint
+      have hdj' := hdj
+      rw [← hdj'] at heP'
+      exact heP' heQ'
+  · tauto
 
 /-- Convert a VertexEnsemble in G with edge-disjoint property to a SetEnsemble in L(G). -/
 def setEnsembleOfVertexEnsemble (A : G.VertexEnsemble s t ι) (hA : A.edgeDisjoint) :
@@ -261,8 +337,30 @@ def setEnsembleOfVertexEnsemble (A : G.VertexEnsemble s t ι) (hA : A.edgeDisjoi
       contradiction
     · -- Paths are edge-disjoint, so their line graph representations are vertex-disjoint
       have hdj := hA hij
-      -- Convert edge-disjoint to vertex-disjoint
-      sorry -- TODO: Show edge-disjoint in G implies vertex-disjoint in L(G)
+      -- Edge-disjoint paths in G have no common edges
+      -- In L(G), edges of G become vertices, so vertex-disjointness follows
+      ext e
+      simp only [mem_inter_iff, mem_vertexSet_iff]
+      constructor
+      · intro ⟨heP, heQ⟩
+        -- e is a vertex in both L(G) paths
+        -- This means e is an edge in both G paths (A.f i and A.f j)
+        -- But paths are edge-disjoint, contradiction
+        have heP' : e ∈ (A.f i).edge := by
+          -- e is in the line graph path's vertex set
+          -- By lineGraph_pathMap_vertex_eq_edge, this equals the original path's edge set
+          have hmap := lineGraph_pathMap_vertex_eq_edge (A.isPath i) (by simp : (A.f i).Nonempty)
+          rw [← hmap] at heP
+          exact heP
+        have heQ' : e ∈ (A.f j).edge := by
+          have hmap := lineGraph_pathMap_vertex_eq_edge (A.isPath j) (by simp : (A.f j).Nonempty)
+          rw [← hmap] at heQ
+          exact heQ
+        -- But paths are edge-disjoint
+        have hdj' := hdj
+        rw [← hdj'] at heP'
+        exact heP' heQ'
+      · tauto
   valid P := by
     obtain ⟨i, rfl⟩ := P
     exact (A.isPath i).lineGraph_pathMap (by simp : (A.f i).Nonempty)
@@ -288,8 +386,13 @@ lemma setEnsembleOfVertexEnsemble_between (A : G.VertexEnsemble s t ι) (hA : A.
       simp [mem_incEdges_iff]
       use (A.f i).last
       rw [A.last_eq i]
-      -- Need to show lastEdge is incident to last vertex
-      sorry -- TODO: Show lastEdge is incident to last vertex
+      -- Use the fact that any path can be written as dropLast.concat lastEdge last
+      have hne : (A.f i).Nonempty := by simp
+      have hconcat := hne.concat_dropLast
+      have hdInc := dInc_concat (A.f i).dropLast hne.lastEdge (A.f i).last
+      rw [← hconcat] at hdInc
+      -- This gives us that lastEdge is incident to last vertex
+      exact hdInc.inc_right
     exact hlast
 
 lemma connBetween_lineGraph_del_iff :
@@ -322,22 +425,14 @@ lemma connBetween_lineGraph_del_iff :
       have hlast : hne.lastEdge ∈ E(G, t) := by
         simp [mem_incEdges_iff]
         use P.last
-        -- lastEdge is incident to last vertex by path structure
-        have hmem : hne.lastEdge ∈ P.edge := hne.lastEdge_mem
-        obtain ⟨x, y, hdInc⟩ := exists_dInc_of_mem_edge hmem
-        -- For a path, the last edge connects to the last vertex
-        -- This follows from the alternating structure
-        cases P with
-        | nil => simp at hmem
-        | cons u e w =>
-          -- The last edge in the sequence connects to P.last
-          -- We can show this by induction or by using the path structure
-          by_cases hylast : y = P.last
-          · subst y
-            exact hdInc.inc_right
-          · -- Then x = P.last (since it's the last edge)
-            -- This requires showing the path structure forces this
-            sorry -- This follows from path structure - last edge's endpoint is last vertex
+        -- Use the fact that P = P.dropLast.concat lastEdge last
+        have hconcat := hne.concat_dropLast
+        -- From dInc_concat, we know (P.dropLast.concat lastEdge last).DInc lastEdge (P.dropLast.last) last
+        have hdInc := dInc_concat P.dropLast hne.lastEdge P.last
+        rw [← hconcat] at hdInc
+        -- So P.DInc lastEdge (P.dropLast.last) P.last
+        -- This means lastEdge is incident to P.last (the right endpoint)
+        exact hdInc.inc_right
       exact hlast
 
 end Graph
