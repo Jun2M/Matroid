@@ -32,8 +32,8 @@ lemma parallel_iff :
     M.Parallel e f ↔ M.IsNonloop e ∧ M.IsNonloop f ∧ M.closure {e} = M.closure {f} := by
   simp [Parallel, parallelClasses, and_comm (a := _ ∈ M.E), isNonloop_iff_mem_compl_loops, loops]
 
-instance {M : Matroid α} : IsSymm α M.Parallel :=
-  inferInstanceAs <| IsSymm α M.parallelClasses
+instance {M : Matroid α} : Std.Symm M.Parallel :=
+  inferInstanceAs <| Std.Symm M.parallelClasses
 
 instance {M : Matroid α} : IsTrans α M.Parallel :=
   inferInstanceAs <| IsTrans α M.parallelClasses
@@ -135,6 +135,10 @@ lemma IsNonloop.parallel_iff_dep (he : M.IsNonloop e) (hf : M.IsNonloop f) (hef 
     M.Parallel e f ↔ M.Dep {e,f} := by
   rw [← hf.indep.mem_closure_iff_of_notMem hef, he.parallel_iff_mem_closure]
 
+lemma IsNonloop.not_parallel_iff (he : M.IsNonloop e) (hf : M.IsNonloop f) (hne : e ≠ f) :
+    ¬ M.Parallel e f ↔ M.Indep {e, f} := by
+  rw [he.parallel_iff_dep hf hne, not_dep_iff]
+
 lemma Parallel.eq_of_indep (h : M.Parallel e f) (hi : M.Indep {e,f}) : e = f := by
   by_contra hef
   exact ((h.isNonloop_left.parallel_iff_dep h.isNonloop_right hef).1 h).not_indep hi
@@ -171,6 +175,29 @@ lemma delete_parallel_iff {D : Set α} :
   intro h
   rw [mem_diff, and_iff_right h.mem_ground_left, mem_diff, and_iff_right h.mem_ground_right]
 
+lemma contract_parallel_iff {C : Set α} :
+    (M ／ C).Parallel e f ↔ f ∈ M.closure (insert e C) ∧ f ∉ M.closure C := by
+  refine ⟨fun h ↦ ?_, fun ⟨h1, h2⟩ ↦ ?_⟩
+  · obtain ⟨hfcl, hfC⟩: f ∈ M.closure (insert e C) ∧ f ∉ C := by simpa using h.symm.mem_closure
+    exact ⟨hfcl, (contract_isNonloop_iff.1 h.isNonloop_right).2⟩
+  rw [parallel_comm, IsNonloop.parallel_iff_mem_closure, contract_closure_eq, singleton_union,
+    mem_diff, and_iff_right h1]
+  · contrapose! h2
+    exact mem_closure_of_mem' M h2
+  simp [mem_ground_of_mem_closure h1, h2]
+
+lemma IsRestriction.parallel_iff (hNM : N ≤r M) :
+    N.Parallel e f ↔ M.Parallel e f ∧ e ∈ N.E ∧ f ∈ N.E := by
+  obtain ⟨R, hR, rfl⟩ := hNM
+  simp [restrict_parallel_iff]
+
+lemma Parallel.of_isRestriction (hN : N.Parallel e f) (hNM : N ≤r M) : M.Parallel e f :=
+  (hNM.parallel_iff.1 hN).1
+
+lemma Parallel.parallel_isRestriction (hM : M.Parallel e f) (hNM : N ≤r M) (he : e ∈ N.E)
+    (hf : f ∈ N.E) : N.Parallel e f := by
+  rwa [hNM.parallel_iff, and_iff_left hf, and_iff_left he]
+
 @[simp] lemma removeLoops_parallel_iff : M.removeLoops.Parallel e f ↔ M.Parallel e f := by
   rw [removeLoops_eq_restrict, restrict_parallel_iff,
     and_iff_left_of_imp (fun h ↦ ⟨h.isNonloop_left, h.isNonloop_right⟩)]
@@ -182,10 +209,6 @@ lemma Parallel.mem_isCocircuit_of_mem {K : Set α}  (hef : M.Parallel e f) (hK :
   have hfK := hK'.symm.subset ⟨hef.mem_ground_right, hf⟩
   rw [← hef.mem_closure_iff_mem_closure, hK'] at hfK
   exact hfK.2 he
-
--- @[simp] lemma comap_parallel_iff {β : Type*} {M : Matroid β} {f : α → β} {x y : α} :
---     (M.comap f).Parallel x y ↔ M.Parallel (f x) (f y) := by
---   simp [parallel_iff]
 
 end Parallel
 

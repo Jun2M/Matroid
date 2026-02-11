@@ -12,17 +12,17 @@ variable {α β ι : Type*} {G H : Graph α β} {u v x x₁ x₂ y y₁ y₂ z s
 namespace Graph
 
 lemma Menger'sTheorem_aux [G.Finite] {S T : Set α} (hS : S ⊆ V(G)) (hT : T ⊆ V(G))
-    (hconn : G.SetConnGe S T n) {A : G.SetEnsemble} (hA : A.between S T)
+    (hconn : G.SetConnGE S T n) {A : G.SetEnsemble} (hA : A.between S T)
     (hAFin : A.paths.Finite) (hAcard : A.paths.encard < n) :
     ∃ B : G.SetEnsemble, B.between S T ∧
-    ∃ x ∉ last '' A.paths, insert x (last '' A.paths) = (last '' B.paths) := by
+    ∃ x ∉ last '' A.paths, insert x (last '' A.paths) = last '' B.paths := by
   classical
   have hTfin : T.Finite := G.vertexSet_finite.subset hT
   have : (V(G) \ T).Finite := G.vertexSet_finite.subset diff_subset
 
   /- Since we have less paths than the connectivity, the last ends of the paths is not an ST cut.
     Therefore, there is an S-(T \ last '' A.paths) path. -/
-  have h1 : (G - (last '' A.paths)).SetConnGe S (T \ last '' A.paths) 1 := by
+  have h1 : (G - (last '' A.paths)).SetConnGE S (T \ last '' A.paths) 1 := by
     have hlast : last '' A.paths ⊆ V(G) := by
       rintro _ ⟨P, hP, rfl⟩
       exact hT <| hA hP |>.last_mem
@@ -179,7 +179,7 @@ decreasing_by
   use (hP'P.subset.trans hGP.vertexSet_subset) first_mem, Or.inr (R.first_mem_bQ2)
 
 lemma Menger'sTheorem_aux' [G.Finite] (hS : S ⊆ V(G)) (hT : T ⊆ V(G)) {n : ℕ}
-    (hconn : G.SetConnGe S T n) :
+    (hconn : G.SetConnGE S T n) :
     ∀ m ≤ n, ∃ A : G.SetEnsemble, A.between S T ∧ A.paths.encard = m := by
   rintro m hn
   match m with
@@ -201,7 +201,7 @@ lemma Menger'sTheorem_aux' [G.Finite] (hS : S ⊆ V(G)) (hT : T ⊆ V(G)) {n : �
   For vertex sets `S` and `T`, if every `S`-`T` cut has at least `n` vertices, then there are `n`
   disjoint paths from `S` to `T`. -/
 theorem Menger'sTheorem_set [G.Finite] (hS : S ⊆ V(G)) (hT : T ⊆ V(G)) (n : ℕ) :
-    G.SetConnGe S T n ↔ ∃ A : G.SetEnsemble, A.between S T ∧ A.paths.encard = n := by
+    G.SetConnGE S T n ↔ ∃ A : G.SetEnsemble, A.between S T ∧ A.paths.encard = n := by
   refine ⟨(Menger'sTheorem_aux' hS hT · n le_rfl), fun ⟨A, hA, hAcard⟩ C hC => ?_⟩
   match n with
   | 0 => exact StrictMono.minimal_preimage_bot (fun ⦃a b⦄ a_1 ↦ a_1) rfl _
@@ -229,18 +229,19 @@ theorem Menger'sTheorem_set [G.Finite] (hS : S ⊆ V(G)) (hT : T ⊆ V(G)) (n : 
 /-- For two vertices `s` and `t`, if every `s`-`t` cut has at least `n` vertices,
     then there are `n` internally disjoint paths from `s` to `t`. -/
 theorem Menger'sTheorem_vertex [G.Finite] (hs : s ∈ V(G)) (ht : t ∈ V(G)) (hι : ENat.card ι = n) :
-    G.ConnBetweenGe s t n ↔ Nonempty (G.VertexEnsemble s t ι) := by
+    G.ConnBetweenGE s t n ↔ Nonempty (G.VertexEnsemble s t ι) := by
+  classical
   have hιFin : Finite ι := ENat.card_lt_top.mp <| hι ▸ ENat.coe_lt_top n
   obtain hne | hne := eq_or_ne s t
   · subst t
-    simp only [hs, connBetweenGe_self, true_iff]
+    simp only [hs, connBetweenGE_self, true_iff]
     exact ⟨G.vertexEnsemble_nil hs ι⟩
   by_cases hadj : G.Adj s t
   · obtain ⟨e, he⟩ := hadj
-    simp only [he.connBetweenGe, true_iff]
+    simp only [he.connBetweenGE, true_iff]
     exact ⟨he.vertexEnsemble ι hne⟩
-  refine ⟨fun h => ?_, fun ⟨A⟩ => ?_⟩
-  · rw [connBetweenGe_iff_setConnGe hne hadj, Menger'sTheorem_set
+  refine ⟨fun h => ?_, fun ⟨A⟩ C hC => ?_⟩
+  · rw [connBetweenGE_iff_setConnGE hne hadj, Menger'sTheorem_set
     (by simpa [subset_diff, hadj] using (G.neighbor_subset s).trans <| subset_insert ..)
     (by simpa [subset_diff, not_symm_not hadj] using (G.neighbor_subset t).trans
     <| subset_insert ..)] at h
@@ -258,51 +259,112 @@ theorem Menger'sTheorem_vertex [G.Finite] (hs : s ∈ V(G)) (ht : t ∈ V(G)) (h
     have hAcardFin : (first '' A.paths).Finite := finite_of_encard_eq_coe hAcard
     rw [← hAcardFin.cast_ncard_eq, ENat.coe_inj] at hAcard
     exact (Finite.equivFinOfCardEq hι).trans (hAcardFin.equivFinOfCardEq hAcard).symm |>.toEmbedding
-  unfold ConnBetweenGe
-  by_contra! hC
-  obtain ⟨C, hC⟩ := hC
-  obtain ⟨i, hdj⟩ : ∃ i, Disjoint V(A.f i) C := by
-    contrapose! hC
-    simp_rw [not_disjoint_iff] at hC
-    let f : ι → C := fun i ↦ ⟨(hC i).choose, (hC i).choose_spec.2⟩
-    have hf : Injective f := by
-      rintro i j hij
-      apply A.internallyDisjoint.eq fun h ↦ ?_
-      have his : (f i).val ≠ s := ne_of_mem_of_not_mem (hC i).choose_spec.2 C.left_not_mem
-      have hit : (f i).val ≠ t := ne_of_mem_of_not_mem (hC i).choose_spec.2 C.right_not_mem
-      have : (f i).val ∈ V(A.f i) ∩ V(A.f j) := ⟨(hC i).choose_spec.1, hij ▸ (hC j).choose_spec.1⟩
-      simp [h, his, hit] at this
-    exact hι ▸ ENat.card_le_card_of_injective hf
-  apply C.not_connectedBetween
-  use A.f i, by simpa [(A.isPath i).isWalk], A.first_eq i, A.last_eq i
+  have hmeet : ∀ i, ∃ x ∈ V(A.f i), x ∈ C := by
+    intro i
+    have hC' : G.IsSepBetween (A.f i).first (A.f i).last C := by
+      simpa [A.first_eq i, A.last_eq i] using hC
+    exact (A.isPath i).isWalk.exists_mem_isSepBetween (X := C) hC'
+  choose v hvV hvC using hmeet
+  let f : ι → C := fun i ↦ ⟨v i, hvC i⟩
+  have hf : Injective f := by
+    intro i j hij
+    have hv : v i = v j := congrArg Subtype.val hij
+    by_contra hne
+    have hsne : v i ≠ s := by
+      exact ne_of_mem_of_not_mem (hvC i) hC.left_not_mem
+    have htne : v i ≠ t := by
+      exact ne_of_mem_of_not_mem (hvC i) hC.right_not_mem
+    have hst : v i = s ∨ v i = t :=
+      A.eq_or_eq_of_mem (hxi := hvV i) (hxj := by simpa [hv] using hvV j) hne
+    cases hst with
+    | inl hs' => exact hsne hs'
+    | inr ht' => exact htne ht'
+  have hcard : ENat.card ι ≤ C.encard := by
+    simpa [ENat.card_coe_set_eq] using (ENat.card_le_card_of_injective hf)
+  simpa [hι] using hcard
 
--- #print axioms Menger'sTheorem_vertex
-
-theorem Menger'sTheorem [G.Finite] (hι : ENat.card ι = n) :
-    G.PreconnGe n ↔ ∀ ⦃s t⦄, s ∈ V(G) → t ∈ V(G) → Nonempty (G.VertexEnsemble s t ι) :=
+theorem Menger'sTheoremPre [G.Finite] (hι : ENat.card ι = n) :
+    G.PreconnGE n ↔ ∀ ⦃s t⦄, s ∈ V(G) → t ∈ V(G) → Nonempty (G.VertexEnsemble s t ι) :=
   forall₄_congr fun _ _ hs ht ↦ Menger'sTheorem_vertex hs ht hι
 
+theorem Menger'sTheorem [G.Finite] (hι : ENat.card ι = n) (hnt : V(G).Nontrivial) :
+    G.ConnGE n ↔ ∀ ⦃s t⦄, s ∈ V(G) → t ∈ V(G) → ∃ A : G.VertexEnsemble s t ι,
+    Set.Subsingleton {i | (A.f i).length = 1} := by
+  classical
+  refine iff_comm.mp ⟨fun h => ?_, fun h s t hs ht => ?_⟩
+  · by_cases hC : G.IsComplete
+    · rw [hC.connGE_iff n]
+      simp only [hnt.not_subsingleton, false_and, false_or]
+      obtain ⟨s, hs, t, ht, hne⟩ := hnt
+      obtain ⟨A, hA⟩ := h hs ht
+      exact A.vertexSet_encard_of_length_one_subsingleton hι hs hne hA
+    rw [← G.preconnGE_iff_connGE_of_not_isComplete hC n]
+    intro s t hs ht
+    rw [Menger'sTheorem_vertex hs ht hι]
+    exact ⟨(h hs ht).choose⟩
+  obtain rfl | hne := eq_or_ne s t
+  · use G.vertexEnsemble_nil hs ι, by simp
+  obtain hem | ⟨e, he⟩ := E(G, s, t).eq_empty_or_nonempty
+  · obtain ⟨A⟩ := Menger'sTheoremPre hι |>.mp h.pre hs ht
+    use A
+    convert subsingleton_empty
+    simp only [WList.length_eq_one_iff, mem_setOf_eq, mem_empty_iff_false, iff_false,
+      not_exists, Set.ext_iff]
+    intro i u e v hi
+    obtain rfl := by simpa using hi ▸ (A.first_eq i)
+    obtain rfl := by simpa using hi ▸ (A.last_eq i)
+    obtain ⟨huv, -, -⟩ := cons_isPath_iff.mp <| hi ▸ (A.isPath i)
+    simp only [first_cons, last_cons, nil_last, Set.ext_iff, mem_linkEdges_iff,
+      mem_empty_iff_false, iff_false] at hem
+    exact hem e huv
+  match n with
+  | 0 =>
+    simp only [cast_zero, ENat.card_eq_zero_iff_empty] at hι
+    use G.vertexEnsemble_empty s t ι, by simp
+  | n + 1 =>
+    have hιn : Nonempty ι := by simp [← ENat.one_le_card_iff_nonempty, hι]
+    have hι' : ENat.card ({hιn.some}ᶜ : Set ι) = n := by
+      have := by simpa [hι] using encard_add_encard_compl ({hιn.some} : Set ι)
+      simp only [ENat.card_coe_set_eq]
+      enat_to_nat!
+      omega
+    obtain ⟨A⟩ := (G ＼ E(G, s, t)).Menger'sTheoremPre hι' |>.mp
+      (h.edgeDelete_linkEdges s t |>.pre) (by simpa : s ∈ _) (by simpa : t ∈ _)
+    have hP : G.IsPath <| cons s e (nil t) := by simpa [hne, ht]
+    use A.of_le edgeDelete_le |>.extend_singleEdge hιn.some hP
+    intro i hAi j hAj
+    obtain rfl | hnei := eq_or_ne i hιn.some <;> obtain rfl | hnej := eq_or_ne j hιn.some
+    <;> simp_all only [mem_linkEdges_iff, cast_add, cast_one, ENat.card_coe_set_eq,
+      mem_setOf_eq, VertexEnsemble.extend_singleEdge_of_eq, cons_length, nil_length, zero_add]
+    · simp [(A.of_le _).extend_singleEdge_of_ne hP hnej, A.of_linkEdges_edgeDelete] at hAj
+    · simp [(A.of_le _).extend_singleEdge_of_ne hP hnei, A.of_linkEdges_edgeDelete] at hAi
+    simp [(A.of_le _).extend_singleEdge_of_ne hP hnei, A.of_linkEdges_edgeDelete] at hAi
+
 theorem Menger'sTheorem_mixed [G.Finite] (hs : s ∈ V(G)) (ht : t ∈ V(G)) (hι : ENat.card ι = n) :
-    (∀ X ⊆ V(G), s ∉ X ∧ t ∉ X → ∀ F ⊆ E(G), ¬ (G - X ＼ F).ConnectedBetween s t →
+    (∀ X ⊆ V(G), s ∉ X ∧ t ∉ X → ∀ F ⊆ E(G), ¬ ((G - X) ＼ F).ConnBetween s t →
     n ≤ X.encard + F.encard) ↔ ∃ A : G.VertexEnsemble s t ι, A.edgeDisjoint := by
   convert (L'(G)).Menger'sTheorem_vertex (by simpa : Sum.inl s ∈ _) (by simpa : Sum.inl t ∈ _) hι
-  · refine ⟨fun h ⟨C, hC, hsC, htC, hCconn⟩ ↦ ?_, fun h X hX ⟨hsX, htX⟩ F hF hXF ↦ ?_⟩
+  · refine ⟨fun h C hC ↦ ?_, fun h X hX ⟨hsX, htX⟩ F hF hXF ↦ ?_⟩
     · change n ≤ C.encard
       rw [← image_preimage_inl_union_image_preimage_inr C, encard_union_eq (by simp),
       Sum.inl_injective.encard_image, Sum.inr_injective.encard_image]
-      refine h (Sum.inl ⁻¹' C) ?_ (by tauto) (Sum.inr ⁻¹' C) ?_ ?_
-      · exact preimage_subset_iff.mpr fun x hxC ↦ by simpa using hC hxC
-      · exact preimage_subset_iff.mpr fun e heC ↦ by simpa using hC heC
-      contrapose! hCconn
-      rwa [← connBetween_mixedLineGraph_del_iff,
-        image_preimage_inl_union_image_preimage_inr] at hCconn
-    specialize h ⟨Sum.inl '' X ∪ Sum.inr '' F, ?_, by simpa, by simpa, ?_⟩
-    · simp [Sum.inl_injective.preimage_image, Sum.inr_injective.preimage_image, hX, hF]
-    · contrapose! hXF
-      rwa [← connBetween_mixedLineGraph_del_iff]
-    change n ≤ (Sum.inl '' X ∪ Sum.inr '' F).encard at h
+      refine h (Sum.inl ⁻¹' C) ?_ ?_ (Sum.inr ⁻¹' C) ?_ ?_
+      · exact preimage_subset_iff.mpr fun x hxC ↦ by simpa using hC.subset hxC
+      · exact ⟨hC.left_not_mem, hC.right_not_mem⟩
+      · exact preimage_subset_iff.mpr fun e heC ↦ by simpa using hC.subset heC
+      rw [← connBetween_mixedLineGraph_del_iff, image_preimage_inl_union_image_preimage_inr]
+      exact hC.not_connBetween
+    have hSep : (L'(G)).IsSepBetween (Sum.inl s) (Sum.inl t) (Sum.inl '' X ∪ Sum.inr '' F) := by
+      refine ⟨?_, ?_, ?_, ?_⟩
+      on_goal 4 =>
+        contrapose! hXF
+        rwa [← connBetween_mixedLineGraph_del_iff]
+      all_goals simp [Sum.inl_injective.preimage_image, Sum.inr_injective.preimage_image, hX, hF,
+      hsX, htX]
+    have h' := h (C := (Sum.inl '' X ∪ Sum.inr '' F)) hSep
+    change n ≤ (Sum.inl '' X ∪ Sum.inr '' F).encard at h'
     rwa [encard_union_eq (by simp), Sum.inl_injective.encard_image,
-      Sum.inr_injective.encard_image] at h
+      Sum.inr_injective.encard_image] at h'
   refine ⟨fun ⟨A, hA⟩ ↦ ⟨mixedLineEnsembleMap A hA⟩, fun ⟨A⟩ ↦ ?_⟩
   classical
   use mixedLineOfEnsembleMap A, mixedLineOfEnsembleMap_edgeDisjoint A

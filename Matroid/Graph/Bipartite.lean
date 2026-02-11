@@ -18,7 +18,7 @@ structure Bipartition (G : Graph α β) where
 
 variable {B : G.Bipartition}
 
-@[simps]
+@[simps (attr := grind =)]
 def Bipartition.symm (B : G.Bipartition) : G.Bipartition where
   left := B.right
   right := B.left
@@ -129,6 +129,30 @@ lemma Bipartition.opp_of_adj (B : G.Bipartition) (hxy : G.Adj x y) : B.Opp x y :
   · rwa [B.notMem_left_iff h.left_mem]
   rwa [B.notMem_right_iff h.right_mem]
 
+lemma Bipartition.mem_right_of_mem_left_of_adj (B : G.Bipartition) (hx : x ∈ B.left)
+    (hxy : G.Adj x y) : y ∈ B.right :=
+  (B.opp_of_adj hxy).mem_left_iff.mp hx
+
+lemma Bipartition.mem_left_of_mem_right_of_adj (B : G.Bipartition) (hx : x ∈ B.right)
+    (hxy : G.Adj x y) : y ∈ B.left :=
+  (B.opp_of_adj hxy).mem_right_iff.mp hx
+
+lemma Bipartition.neighbor_subset_right_of_mem_left (B : G.Bipartition) (hx : x ∈ B.left) :
+    N(G, x) ⊆ B.right := fun _ hy => B.mem_right_of_mem_left_of_adj hx hy
+
+lemma Bipartition.neighbor_subset_left_of_mem_right (B : G.Bipartition) (hx : x ∈ B.right) :
+    N(G, x) ⊆ B.left := fun _ hy => B.mem_left_of_mem_right_of_adj hx hy
+
+lemma Bipartition.setNeighbor_subset_right_of_subset_left (B : G.Bipartition) {S : Set α}
+    (hS : S ⊆ B.left) : N(G, S) ⊆ B.right := by
+  rintro y ⟨_, x, hxS, hxy⟩
+  exact B.mem_right_of_mem_left_of_adj (hS hxS) hxy
+
+lemma Bipartition.setNeighbor_subset_left_of_subset_right (B : G.Bipartition) {S : Set α}
+    (hS : S ⊆ B.right) : N(G, S) ⊆ B.left := by
+  rintro y ⟨_, x, hxS, hxy⟩
+  exact B.mem_left_of_mem_right_of_adj (hS hxS) hxy
+
 @[simp]
 lemma Bipartition.symm_opp : B.symm.Opp = B.Opp := by
   ext x y
@@ -164,6 +188,86 @@ def Bipartition.of_isSpanningSubgraph (B : H.Bipartition) (hHG : H ≤s G)
     · exact ⟨x, hx, y, by rwa [← (h_isLink heH hexy).mem_left_iff], hexy⟩
     exact ⟨y, by rwa [← (h_isLink heH hexy).mem_right_iff], x, hx, hexy.symm⟩
 
+def Bipartition.of_le (B : G.Bipartition) (hle : H ≤ G) : H.Bipartition := by
+  refine ⟨B.left ∩ V(H), B.right ∩ V(H), ?_, ?_, ?_⟩
+  · rw [← union_inter_distrib_right, B.union_eq,
+      inter_eq_self_of_subset_right (vertexSet_mono hle)]
+  · exact B.disjoint.mono inter_subset_left inter_subset_left
+  intro e he
+  obtain ⟨x, hx, y, hy, hxy⟩ := B.forall_edge e (edgeSet_mono hle he)
+  replace hxy := hxy.of_le_of_mem hle he
+  exact ⟨x, ⟨hx, hxy.left_mem⟩, y, ⟨hy, hxy.right_mem⟩, hxy⟩
+
+def Bipartition.iUnion {ι : Type*} {H : ι → Graph α β} (B : ∀ i, (H i).Bipartition)
+    (hdj : Pairwise (StronglyDisjoint on H)) :
+    (Graph.iUnion H (hdj.mono fun _ _ h ↦ h.compatible)).Bipartition where
+  left := ⋃ i, (B i).left
+  right := ⋃ i, (B i).right
+  union_eq := by simp +contextual [Bipartition.union_eq, ← iUnion_union_distrib]
+  disjoint := by
+    simp only [disjoint_iUnion_right, disjoint_iUnion_left]
+    intro i j
+    obtain rfl | hne := eq_or_ne i j
+    · exact (B i).disjoint
+    exact (hdj hne.symm).vertex.mono (B j).left_subset (B i).right_subset
+  forall_edge e := by
+    simp_rw [iUnion_edgeSet, mem_iUnion, iUnion_isLink, forall_exists_index]
+    intro i he
+    obtain ⟨x, hx, y, hy, hxy⟩ := (B i).forall_edge _ he
+    exact ⟨x, ⟨i, hx⟩, y, ⟨i, hy⟩, ⟨i, hxy⟩⟩
+
+def Bipartition.sUnion {s : Set (Graph α β)} (B : ∀ G ∈ s, G.Bipartition)
+    (hs : s.Pairwise StronglyDisjoint) :
+    (Graph.sUnion s (hs.mono' (by simp))).Bipartition where
+  left := ⋃ G : s, (B G G.prop).left
+  right := ⋃ G : s, (B G G.prop).right
+  union_eq := by simp +contextual [Bipartition.union_eq, ← iUnion_union_distrib]
+  disjoint := by
+    simp only [iUnion_coe_set, disjoint_iUnion_right, disjoint_iUnion_left]
+    intro G hG H hH
+    obtain rfl | hne := eq_or_ne G H
+    · exact (B G hG).disjoint
+    exact (hs hH hG hne.symm).vertex.mono (B H hH).left_subset (B G hG).right_subset
+  forall_edge e := by
+    simp_rw [sUnion_edgeSet, mem_iUnion, sUnion_isLink, forall_exists_index]
+    intro i hs hi
+    obtain ⟨x, hx, y, hy, hxy⟩ := (B i hs).forall_edge _ hi
+    exact ⟨x, ⟨⟨i, hs⟩, hx⟩, y, ⟨⟨i, hs⟩, hy⟩, ⟨i, hs, hxy⟩⟩
+
+noncomputable def Bipartition.union (G H : Graph α β) (B₁ : G.Bipartition) (B₂ : H.Bipartition)
+    (hGH : G.StronglyDisjoint H) : (G ∪ H).Bipartition := by
+  rw [union_eq_sUnion]
+  classical
+  exact Bipartition.sUnion (B := fun i hi ↦ by
+    by_cases h : i = G
+    · subst h
+      exact B₁
+    simp only [mem_insert_iff, mem_singleton_iff] at hi
+    obtain rfl : i = H ＼ E(G) := hi.resolve_left h
+    exact B₂.of_le edgeDelete_le) (by
+    rw [Set.pairwise_pair_of_symmetric Std.Symm.symm]
+    exact fun _ ↦ hGH.anti_right edgeDelete_le)
+
+/-- Rather than switching the entire bipartition, we can switch the bipartition for the component
+ containing `x`. -/
+noncomputable def Bipartition.symm_on (B : G.Bipartition) (x : α) (_hx : x ∈ V(G)) :
+    G.Bipartition := by
+  classical
+  -- Work componentwise, swapping only on the unique component containing `x`.
+  set hs : G.Components.Pairwise Compatible :=
+    (G.components_pairwise_stronglyDisjoint.mono' (fun A B hAB ↦ hAB.compatible))
+  -- Build a bipartition on each component by restricting `B`, then swap on the one containing `x`.
+  have hB : (Graph.sUnion G.Components hs).Bipartition := by
+    refine Bipartition.sUnion (s := G.Components)
+      (B := fun H hH => by
+        have hHco : H.IsCompOf G := (mem_components_iff_isCompOf).1 hH
+        by_cases hxH : x ∈ V(H)
+        · exact (B.of_le hHco.le).symm
+        · exact (B.of_le hHco.le))
+      G.components_pairwise_stronglyDisjoint
+  -- Transport back to `G` using `hG'`.
+  exact G.eq_sUnion_components ▸ hB
+
 /-- A graph with a bipartition is bipartite. -/
 def Bipartite (G : Graph α β) : Prop := Nonempty G.Bipartition
 
@@ -181,28 +285,30 @@ lemma Bipartite.of_le (hG : G.Bipartite) (hle : H ≤ G) : H.Bipartite := by
   replace hxy := hxy.of_le_of_mem hle he
   exact ⟨x, ⟨hx, hxy.left_mem⟩, y, ⟨hy, hxy.right_mem⟩, hxy⟩
 
+lemma Bipartite.loopless (hG : G.Bipartite) : G.Loopless where
+  not_isLoopAt e v h := by
+    obtain ⟨x, hx, y, hy, hxy⟩ := hG.some.forall_edge e h.edge_mem
+    have := hG.some.notMem_right (x := x)
+    obtain ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ := hxy.eq_and_eq_or_eq_and_eq h <;> tauto
+
 /-- A disjoint union of bipartite graphs is bipartite. -/
 lemma iUnion_stronglyDisjoint_bipartite {ι : Type*} {H : ι → Graph α β}
     (hdj : Pairwise (StronglyDisjoint on H)) (hbp : ∀ i, Bipartite (H i)) :
     Bipartite <| Graph.iUnion H (hdj.mono fun _ _ h ↦ h.compatible) := by
   set B : ∀ i, (H i).Bipartition := fun i ↦ (hbp i).some
-  refine ⟨⟨⋃ i, (B i).left, ⋃ i, (B i).right, ?_, ?_, ?_⟩⟩
-  · simp +contextual [Bipartition.union_eq, ← iUnion_union_distrib]
-  · simp only [disjoint_iUnion_right, disjoint_iUnion_left]
-    intro i j
-    obtain rfl | hne := eq_or_ne i j
-    · exact (B i).disjoint
-    exact (hdj hne.symm).vertex.mono (B j).left_subset (B i).right_subset
-  simp_rw [iUnion_edgeSet, mem_iUnion, iUnion_isLink, forall_exists_index]
-  intro e i he
-  obtain ⟨x, hx, y, hy, hxy⟩ := (B i).forall_edge _ he
-  exact ⟨x, ⟨i, hx⟩, y, ⟨i, hy⟩, ⟨i, hxy⟩⟩
+  exact ⟨Bipartition.iUnion B hdj⟩
 
 lemma sUnion_stronglyDisjoint_bipartite {s : Set (Graph α β)} (hdj : s.Pairwise StronglyDisjoint)
     (hbp : ∀ G ∈ s, G.Bipartite) : Bipartite <| (Graph.sUnion s (hdj.mono' (by simp))) := by
   apply iUnion_stronglyDisjoint_bipartite
   · exact (pairwise_subtype_iff_pairwise_set s StronglyDisjoint).2 hdj
   simpa
+
+lemma union_stronglyDisjoint_bipartite (hG : G.Bipartite) (hH : H.Bipartite)
+    (hGH : G.StronglyDisjoint H) : (G ∪ H).Bipartite := by
+  obtain ⟨B₁⟩ := hG
+  obtain ⟨B₂⟩ := hH
+  exact ⟨Bipartition.union G H B₁ B₂ hGH⟩
 
 lemma bipartite_iff_forall_component :
     G.Bipartite ↔ ∀ (H : Graph α β), H.IsCompOf G → H.Bipartite := by
@@ -228,9 +334,27 @@ lemma Bipartition.opp_first_get_iff (B : G.Bipartition) (hW : G.IsWalk W) (hn : 
   rw [← B.not_same_iff hW.first_mem (hW.vertexSet_subset <| W.get_mem n),
     B.same_first_get_iff hW hn, Nat.not_even_iff_odd]
 
+lemma Bipartition.vertex_isChain_opp (B : G.Bipartition) (hW : G.IsWalk W) :
+    W.vertex.IsChain (B.Opp · ·) := by
+  induction hW with
+  | nil _ => simp [WList.vertex]
+  | @cons x e w hw hxy ih =>
+    cases w with
+    | nil y =>
+      -- `W.vertex = [x,y]`.
+      simp only [vertex, List.isChain_cons_cons, List.IsChain.singleton, and_true]
+      exact B.opp_of_adj hxy.adj
+    | cons y f w' =>
+      -- `W.vertex = x :: y :: w'.vertex`.
+      have hop : B.Opp x y := by simpa using (B.opp_of_adj hxy.adj)
+      -- `ih` is the chain condition on `y :: w'.vertex`.
+      simp only [vertex, List.isChain_cons_cons]
+      refine ⟨hop, ?_⟩
+      simpa using ih
+
 lemma Bipartition.same_iff_even_dist (B : G.Bipartition) (hG : G.Connected) (hx : x ∈ V(G))
     (hy : y ∈ V(G)) : B.Same x y ↔ Even (G.dist x y) := by
-  obtain ⟨P, hP, rfl, rfl⟩ := (hG.connectedBetween hx hy).exists_isShortestPath
+  obtain ⟨P, hP, rfl, rfl⟩ := (hG.connBetween hx hy).exists_isShortestPath
   simp [← hP.length_eq_dist, ← B.same_first_get_iff hP.isPath.isWalk le_rfl]
 
 lemma Bipartition.opp_iff_odd_dist (B : G.Bipartition) (hG : G.Connected) (hx : x ∈ V(G))
@@ -280,7 +404,7 @@ lemma IsForest.bipartite {F : Graph α β} (hF : IsForest F) : F.Bipartite := by
   · rw [add_comm]
     exact aux hxy.symm (not_le.1 hle).le
   obtain ⟨P, hP, hPfirst, hPlast⟩ :=
-    (hFt.connected.connectedBetween hxy.left_mem hr).exists_isShortestPath
+    (hFt.connected.connBetween hxy.left_mem hr).exists_isShortestPath
   have hPy : F.IsPath (WList.cons y e P) := by
     suffices y ∉ P by simpa [cons_isPath_iff, hP.isPath, hPfirst, hxy.symm]
     intro hyP
@@ -299,7 +423,7 @@ lemma IsForest.bipartite {F : Graph α β} (hF : IsForest F) : F.Bipartite := by
   simp
 
 /-- A graph is bipartite if and only if all its cycles are even -/
-lemma bipartite_iff_forall_cycle_even : G.Bipartite ↔ ∀ C, G.IsCycle C → Even C.length := by
+lemma bipartite_iff_forall_cycle_even : G.Bipartite ↔ ∀ C, G.IsCyclicWalk C → Even C.length := by
   refine ⟨fun h C hC ↦ h.length_even_of_isWalk_isClosed hC.isWalk hC.isClosed, fun h ↦ ?_⟩
   wlog hG : G.Connected with aux
   · exact bipartite_iff_forall_component.2 <|
@@ -310,7 +434,7 @@ lemma bipartite_iff_forall_cycle_even : G.Bipartite ↔ ∀ C, G.IsCycle C → E
   have hxT : x ∈ V(T) := (hTG.vertexSet_eq ▸ hexy.left_mem)
   have hyT : y ∈ V(T) := (hTG.vertexSet_eq ▸ hexy.right_mem)
   rw [B.opp_iff_odd_dist hT.connected hxT hyT]
-  obtain ⟨P, hP, rfl, rfl⟩ := (hT.connected.connectedBetween hxT hyT).exists_isShortestPath
+  obtain ⟨P, hP, rfl, rfl⟩ := (hT.connected.connBetween hxT hyT).exists_isShortestPath
   specialize h (cons P.last e P) ?_
-  · exact (hP.isPath.of_le hTG.le).cons_isCycle hexy <| mt hP.isPath.isWalk.edge_mem_of_mem he
+  · exact (hP.isPath.of_le hTG.le).cons_isCyclicWalk hexy <| mt hP.isPath.isWalk.edge_mem_of_mem he
   rwa [cons_length, Nat.even_add_one, Nat.not_even_iff_odd, hP.length_eq_dist] at h

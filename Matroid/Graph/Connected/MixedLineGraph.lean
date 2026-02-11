@@ -26,10 +26,10 @@ lemma Inc.isLink_of_inc_of_ne (h1 : G.Inc e x) (h2 : G.Inc e y) (hne : x ≠ y) 
   obtain rfl | h := h1.eq_or_isLink_of_inc h2 <;> tauto
 
 lemma connBetween_vertexDelete_iff_of_degree_le_one (hX : ∀ x ∈ X, G.eDegree x ≤ 1) (hs : s ∉ X)
-    (ht : t ∉ X) : (G - X).ConnectedBetween s t ↔ G.ConnectedBetween s t := by
-  refine ⟨fun h ↦ h.of_le vertexDelete_le, fun h ↦ ?_⟩
+    (ht : t ∉ X) : (G - X).ConnBetween s t ↔ G.ConnBetween s t := by
+  refine ⟨fun h ↦ h.mono vertexDelete_le, fun h ↦ ?_⟩
   obtain ⟨w, hw, rfl, rfl⟩ := h.exists_isPath
-  use w, by simp [hw.isWalk, hw.disjoint_of_degree_le_one hX hs ht]
+  use w, by simp [hw.isWalk, hw.isTrail.disjoint_of_degree_le_one hX hs ht]
 
 instance (G : Graph α β) : Simple L'(G) where
   not_isLoopAt ab x h := by
@@ -85,7 +85,7 @@ lemma mixedLineGraph_inr_eDegree_le_two : L'(G).eDegree (Sum.inr e) ≤ 2 := by
   rw [eDegree_eq_encard_adj, mixedLineGraph_neighbor_inr, inl_injective.encard_image]
   exact G.endSet_encard_le e
 
-lemma mixedLineGraph_edgeDelete : L'(G ＼ F) = L'(G) - (Sum.inr '' F) := by
+lemma mixedLineGraph_edgeDelete : L'(G ＼ F) = L'(G) - (Sum.inr '' F : Set (α ⊕ β)) := by
   ext a b c
   · simp only [mixedLineGraph_vertexSet, edgeDelete_vertexSet, edgeDelete_edgeSet,
       vertexDelete_vertexSet, image_diff Sum.inr_injective, union_diff_distrib]
@@ -194,7 +194,7 @@ lemma IsPath.mixedLineGraph_walkMap {P} (hP : G.IsPath P) :
       cons_vertex, List.nodup_cons, List.mem_cons, reduceCtorEq, mem_vertex,
       inl_mem_mixedLineGraph_walkMap_iff, or_self, not_false_eq_true,
       inr_mem_mixedLineGraph_walkMap_iff, mem_edgeSet_iff]
-    use hP.1.mixedLineGraph_walkMap.nodup
+    use hP.2.1.mixedLineGraph_walkMap.nodup
 
 @[simp]
 lemma mixedLineGraph_walkMap_vertexSet :
@@ -369,7 +369,7 @@ lemma IsPath.WalkOfMixedLineGraph [DecidableEq α] {w : WList (α ⊕ β) (α ×
     simp only [cons_isPath_iff, mixedLineGraph_isLink, Sym2.eq, Sym2.rel_iff', Prod.mk.injEq,
       Prod.swap_prod_mk, first_cons, inl.injEq, reduceCtorEq, and_false, or_false, mem_cons_iff,
       not_or, ne_eq] at h
-    obtain ⟨⟨hw, ⟨hdc, hh⟩, hbw⟩, ⟨hbs, rfl, rfl⟩, -, hsw⟩ := h
+    obtain ⟨⟨hbs, rfl, rfl⟩, ⟨⟨hdc, hh⟩, hw, hbw⟩, -, hsw⟩ := h
     simp only [first_cons, inl.injEq, reduceCtorEq, false_and, inr.injEq, false_or,
       Graph.WalkOfMixedLineGraph] at hf hh ⊢
     obtain ⟨hcw, rfl⟩ := hh
@@ -381,13 +381,13 @@ lemma IsPath.WalkOfMixedLineGraph [DecidableEq α] {w : WList (α ⊕ β) (α ×
     use by simpa, (hw.WalkOfMixedLineGraph hcw.symm hl |>.nodup)
 
 lemma IsWalk.connBetween_of_mixedLineGraph {w : WList (α ⊕ β) (α × β)} {s t} (h : L'(G).IsWalk w)
-    (hf : w.first = Sum.inl s) (hl : w.last = Sum.inl t) : G.ConnectedBetween s t := by
+    (hf : w.first = Sum.inl s) (hl : w.last = Sum.inl t) : G.ConnBetween s t := by
   classical
   use Graph.WalkOfMixedLineGraph w h hf hl, h.WalkOfMixedLineGraph hf hl, by simp, by simp
 
 @[simp]
 lemma connBetween_mixedLineGraph_iff :
-    L'(G).ConnectedBetween (Sum.inl s) (Sum.inl t) ↔ G.ConnectedBetween s t := by
+    L'(G).ConnBetween (Sum.inl s) (Sum.inl t) ↔ G.ConnBetween s t := by
   refine ⟨fun h ↦ ?_, fun h ↦ ?_⟩
   · obtain ⟨w, hw, hf, hl⟩ := h
     exact hw.connBetween_of_mixedLineGraph hf hl
@@ -395,8 +395,8 @@ lemma connBetween_mixedLineGraph_iff :
   use mixedLineGraph_walkMap w, hw.mixedLineGraph_walkMap, by simp, by simp
 
 lemma connBetween_mixedLineGraph_del_iff :
-    (L'(G) - (Sum.inl '' X ∪ Sum.inr '' F)).ConnectedBetween (Sum.inl s) (Sum.inl t) ↔
-    (G - X ＼ F).ConnectedBetween s t := by
+    (L'(G) - (Sum.inl '' X ∪ Sum.inr '' F)).ConnBetween (Sum.inl s) (Sum.inl t) ↔
+    ((G - X) ＼ F).ConnBetween s t := by
   refine ⟨fun h ↦ ?_, fun h ↦ ?_⟩
   · rwa [← connBetween_vertexDelete_iff_of_degree_le_one (X := inr '' E(G, X)) ?_ (by simp)
     (by simp), ← vertexDelete_vertexDelete, vertexDelete_vertexDelete_comm,
@@ -418,11 +418,11 @@ lemma connBetween_mixedLineGraph_del_iff :
     · simpa using h2 x hx
     rfl
   rw [← connBetween_mixedLineGraph_iff, mixedLineGraph_edgeDelete, mixedLineGraph_vertexDelete] at h
-  refine h.of_le ?_
+  refine h.mono ?_
   rw [← vertexDelete_vertexDelete, ← vertexDelete_vertexDelete, vertexDelete_vertexDelete_comm]
   exact vertexDelete_le
 
-@[simps]
+@[simps (attr := grind =)]
 def mixedLineOfEnsembleMap [DecidableEq α] (A : L'(G).VertexEnsemble (inl s) (inl t) ι) :
     G.VertexEnsemble s t ι where
   f i := WalkOfMixedLineGraph (A.f i) (A.isPath i).isWalk (A.first_eq i) (A.last_eq i)

@@ -152,21 +152,48 @@ variable {H : ι → Graph α β} {H₀ : Graph α β}
 @[reducible] def Subgraph (G : Graph α β) := {H // H ≤ G}
 
 namespace Subgraph
+variable {H H₁ H₂ : G.Subgraph}
 
-instance {G : Graph α β} : CoeOut G.Subgraph (Graph α β) where
+instance : CoeOut G.Subgraph (Graph α β) where
   coe H := H.1
 
 @[simp]
-lemma le (H : G.Subgraph) : H.1 ≤ G :=
-  H.2
+lemma le (H : G.Subgraph) : H.1 ≤ G := H.2
 
 instance : PartialOrder G.Subgraph := inferInstanceAs (PartialOrder {H // H ≤ G})
 
 @[simp]
-lemma mk_le_iff {hH₁ : H₁ ≤ G} {H : G.Subgraph} : (⟨H₁, hH₁⟩ : G.Subgraph) ≤ H ↔ H₁ ≤ H.1 := Iff.rfl
+lemma mk_le_iff {H₁} {hH₁ : H₁ ≤ G} : (⟨H₁, hH₁⟩ : G.Subgraph) ≤ H ↔ H₁ ≤ H.1 := Iff.rfl
 
 @[simp]
-lemma le_mk_iff {hH₁ : H₁ ≤ G} {H : G.Subgraph} : H ≤ (⟨H₁, hH₁⟩ : G.Subgraph) ↔ H.1 ≤ H₁ := Iff.rfl
+lemma le_mk_iff {H₁} {hH₁ : H₁ ≤ G} : H ≤ (⟨H₁, hH₁⟩ : G.Subgraph) ↔ H.1 ≤ H₁ := Iff.rfl
+
+lemma le_iff_subset : H₁ ≤ H₂ ↔ V(H₁.val) ⊆ V(H₂.val) ∧ E(H₁.val) ⊆ E(H₂.val) := by
+  refine ⟨fun h => ⟨by grw [h], by grw [h]⟩, fun ⟨H1, H2⟩ => ?_⟩
+  exact Subtype.coe_le_coe.mp <| le_of_le_le_subset_subset H₁.prop H₂.prop H1 H2
+
+@[ext]
+lemma ext (hV : V(H₁.val) = V(H₂.val)) (hE : E(H₁.val) = E(H₂.val)) : H₁ = H₂ :=
+  Subtype.ext <| Graph.ext_of_le_le H₁.prop H₂.prop hV hE
+
+lemma _root_.Graph.IsLink.of_mem (hxy : H₁.val.IsLink e x y) (he : e ∈ E(H₂.val)) :
+    H₂.val.IsLink e x y := hxy.of_le H₁.prop |>.of_le_of_mem H₂.prop he
+
+lemma _root_.Graph.IsLink.isLink_iff_mem (hxy : H₁.val.IsLink e x y) :
+    H₂.val.IsLink e x y ↔ e ∈ E(H₂.val) :=
+  ⟨fun h => h.edge_mem, fun h => hxy.of_mem h⟩
+
+lemma _root_.Graph.Inc.of_mem (h : H₁.val.Inc e x) (he : e ∈ E(H₂.val)) : H₂.val.Inc e x :=
+  h.of_le H₁.prop |>.of_le_of_mem H₂.prop he
+
+lemma _root_.Graph.Inc.isInc_iff_mem (hx : H₁.val.Inc e x) :
+    H₂.val.Inc e x ↔ e ∈ E(H₂.val) :=
+  ⟨fun h => h.edge_mem, fun h => hx.of_mem h⟩
+
+lemma endSetSet_subset_of_le_subset (H₁ : G.Subgraph) (hF : F ⊆ E(H₂.val)) :
+    V(H₁.val, F) ⊆ V(H₂.val, F) := by
+  rintro x ⟨e, he, hx⟩
+  exact ⟨e, he, hx.of_mem (hF he)⟩
 
 @[simp]
 lemma compatible (H₁ H₂ : G.Subgraph) : H₁.val.Compatible H₂.val :=
@@ -217,6 +244,11 @@ lemma coe_top : ((⊤ : G.Subgraph) : Graph α β) = G := rfl
 
 @[simp]
 lemma coe_bot : ((⊥ : G.Subgraph) : Graph α β) = ⊥ := rfl
+
+@[simp, push]
+lemma ne_bot_iff : H ≠ ⊥ ↔ V(H.val).Nonempty := by
+  rw [← Graph.ne_bot_iff]
+  simp
 
 lemma coe_iInf (H : ι → G.Subgraph) :
     (⨅ i, H i : G.Subgraph) = Graph.iInter (Option.elim · G (H ·)) := by
@@ -298,9 +330,15 @@ lemma range_iInf (f : ι' → ι) (H : ι → G.Subgraph) :
     simp
   · simp [Graph.iInter_range]
 
-lemma disjoint_iff (H₁ H₂ : G.Subgraph) : Disjoint H₁ H₂ ↔ H₁.val.StronglyDisjoint H₂.val := by
+lemma disjoint_iff_stronglyDisjoint (H₁ H₂ : G.Subgraph) :
+    Disjoint H₁ H₂ ↔ H₁.val.StronglyDisjoint H₂.val := by
   rw [_root_.disjoint_iff, ← Subtype.coe_inj, coe_inf, coe_bot, ← disjoint_iff_inter_eq_bot,
     stronglyDisjoint_iff_disjoint_of_compatible (H₁.compatible H₂)]
+
+@[simp]
+lemma disjoint_iff (H₁ H₂ : G.Subgraph) : Disjoint H₁ H₂ ↔ Disjoint V(H₁.val) V(H₂.val) := by
+  rw [_root_.disjoint_iff, ← Subtype.coe_inj, coe_inf, coe_bot, ← disjoint_iff_inter_eq_bot,
+    disjoint_iff_vertexSet_disjoint]
 
 def of_le {H : Graph α β} (H' : H.Subgraph) (hle : H ≤ G) : G.Subgraph :=
   ⟨H', H'.le.trans hle⟩
@@ -323,6 +361,151 @@ def minAx : CompletelyDistribLattice.MinimalAxioms G.Subgraph where
 /-- The subgraphs of a graph `G` form a completely distributive lattice.-/
 instance : CompletelyDistribLattice G.Subgraph :=
   CompletelyDistribLattice.ofMinimalAxioms Subgraph.minAx
+
+/-- The minimal subgraph of `G` that contains the edges in `F`. -/
+def ofEdge (G : Graph α β) (F : Set β) : G.Subgraph where
+  val := G[V(G, F)] ↾ F
+  property := edgeRestrict_le.trans <| induce_le (by simp)
+
+@[simp]
+lemma induce_endSetSet_inter_eq (F : Set β) : E(G[V(G, F)]) ∩ F = E(G) ∩ F := by
+  ext e
+  simp only [induce_edgeSet, mem_endSetSet_iff, mem_inter_iff, mem_setOf_eq, and_congr_left_iff]
+  refine fun he ↦ ⟨fun ⟨_, _, he, _⟩ => he.edge_mem, fun h => ?_⟩
+  obtain ⟨x, y, h⟩ := exists_isLink_of_mem_edgeSet h
+  exact ⟨x, y, h, ⟨e, he, h.inc_left⟩, ⟨e, he, h.inc_right⟩⟩
+
+@[simp]
+lemma ofEdge_vertexSet (F : Set β) : V((ofEdge G F).val) = V(G, F) := by
+  simp [ofEdge]
+
+@[simp]
+lemma ofEdge_edgeSet (F : Set β) : E((ofEdge G F).val) = E(G) ∩ F := by
+  simp [ofEdge, edgeRestrict_edgeSet]
+
+@[simp]
+lemma ofEdge_isLink (F : Set β) : (ofEdge G F).val.IsLink e x y ↔ e ∈ F ∧ G.IsLink e x y := by
+  simp only [ofEdge, edgeRestrict_isLink, induce_isLink, mem_endSetSet_iff, and_congr_right_iff,
+    and_iff_left_iff_imp]
+  exact fun heF he ↦ ⟨⟨e, heF, he.inc_left⟩, e, heF, he.inc_right⟩
+
+/-- The complement of a subgraph of `G` is the minimal subgraph of `G` that contains
+  the edges and vertices that are not in the subgraph. See `compl_le_iff`.
+  This complement is not well behaved in general order theoretically. See `inf_compl_eq_bot_iff`.
+  However, it is useful for other purposes.-/
+instance : Compl G.Subgraph where
+  compl H := by
+    use G[V(G) \ V(H.val) ∪ V(G, E(G) \ E(H.val))] ＼ E(H.val)
+    grw [edgeDelete_le, induce_le]
+    rw [union_subset_iff]
+    refine ⟨?_, endSetSet_subset G _⟩
+    grw [← vertexDelete_vertexSet, vertexSet_mono (vertexDelete_le)]
+
+lemma compl_vertexSet (H : G.Subgraph) : V(Hᶜ.val) = V(G) \ V(H.val) ∪ V(G, E(G) \ E(H.val)) := rfl
+
+@[simp]
+lemma compl_edgeSet (H : G.Subgraph) : E(Hᶜ.val) = E(G) \ E(H.val) := by
+  change E(G[V(G) \ V(H.val) ∪ V(G, E(G) \ E(H.val))] ＼ E(H.val)) = _
+  ext e
+  simp only [edgeDelete_edgeSet, induce_edgeSet, mem_union, mem_diff, mem_endSetSet_iff,
+    mem_setOf_eq, and_congr_left_iff]
+  refine fun heH ↦ ⟨fun ⟨x, y, hxy, h⟩ => hxy.edge_mem, fun h => ?_⟩
+  obtain ⟨x, y, hxy⟩ := exists_isLink_of_mem_edgeSet h
+  use x, y, hxy, ?_, ?_ <;> right <;> use e, ⟨h, heH⟩
+  · exact hxy.inc_left
+  · exact hxy.inc_right
+
+lemma disjoint_compl_edgeSet (H : G.Subgraph) : Disjoint E(H.val) E(Hᶜ.val) := by
+  simp only [compl_edgeSet]
+  exact disjoint_sdiff_right
+
+lemma mem_edgeSet_or_compl_edgeSet (H : G.Subgraph) (he : e ∈ E(G)) :
+    e ∈ E(H.val) ∨ e ∈ E(Hᶜ.val) := by
+  simp only [compl_edgeSet, mem_diff, he, true_and]
+  exact em _
+
+@[simp]
+lemma compl_isLink (H : G.Subgraph) : Hᶜ.val.IsLink e x y ↔ G.IsLink e x y ∧ e ∉ E(H.val) := by
+  rw [isLink_iff_isLink_and_mem_of_le Hᶜ.prop, compl_edgeSet, mem_diff, ← and_assoc]
+  simp only [and_congr_left_iff, and_iff_left_iff_imp]
+  exact fun a a_1 ↦ a_1.edge_mem
+
+lemma vertexSet_compl_subset_compl_vertexSet (H : G.Subgraph) : V(G) \ V(H.val) ⊆ V(Hᶜ.val) := by
+  simp only [compl_vertexSet, subset_union_left]
+
+@[simp]
+lemma compl_le_iff : H₁ᶜ ≤ H₂ ↔ V(G) \ V(H₁.val) ⊆ V(H₂.val) ∧ E(G) \ E(H₁.val) ⊆ E(H₂.val) := by
+  refine ⟨fun h => ⟨?_, ?_⟩, fun ⟨H1, H2⟩ => ?_⟩
+  · grw [← h, vertexSet_compl_subset_compl_vertexSet]
+  · grw [← h, compl_edgeSet]
+  grw [le_iff_subset, compl_edgeSet, compl_vertexSet, union_subset_iff]
+  use ⟨H1, ?_⟩, H2
+  have := coe_top ▸ endSetSet_subset_of_le_subset ⊤ H2
+  grw [this, endSetSet_subset]
+
+lemma ofEdge_diff_le_compl (H : G.Subgraph) : ofEdge G (E(G) \ E(H.val)) ≤ Hᶜ := by
+  refine le_iff_subset.mpr ⟨?_, ?_⟩
+  · simp [ofEdge_vertexSet, compl_vertexSet]
+  simp
+
+-- @[simp]
+-- lemma compl_compl (H : G.Subgraph) : Hᶜᶜ = H := by
+--   rw [Subgraph.ext_iff]
+--   have hE : E(Hᶜᶜ.val) = E(H.val) := by
+--     simp [edgeSet_mono H.prop]
+--   refine ⟨?_, hE⟩
+--   ext x
+--   simp +contextual only [compl_vertexSet, compl_edgeSet, sdiff_sdiff_right_self,
+-- Set.inf_eq_inter,
+--     mem_union, mem_diff, mem_endSetSet_iff, not_or, not_and, not_not, not_exists, and_imp,
+--     mem_inter_iff, iff_def, implies_true, true_and]
+--   refine ⟨fun h => ?_, fun h => ?_⟩
+--   · obtain ⟨h, h', h''⟩ | ⟨e, h, h'⟩ := h
+--     · exact h' h
+--     exact h'.of_le_of_mem H.prop h.2 |>.vertex_mem
+--   by_cases he : ∃ e, H.val.Inc e x
+--   · obtain ⟨e, he⟩ := he
+--     exact Or.inr ⟨e, ⟨edgeSet_mono H.prop he.edge_mem, he.edge_mem⟩, he.of_le H.prop⟩
+--   left
+--   use vertexSet_mono H.prop h
+--   rintro e heG heH hex
+--   have := he
+
+def sep (H : G.Subgraph) : Set α := V(H.val) ∩ V(G, E(G) \ E(H.val))
+
+@[simp]
+lemma mem_sep_iff (H : G.Subgraph) (x : α) :
+    x ∈ H.sep ↔ x ∈ V(H.val) ∧ ∃ e ∈ E(G) \ E(H.val), G.Inc e x := Iff.rfl
+
+@[simp]
+lemma sep_subset (H : G.Subgraph) : H.sep ⊆ V(H.val) := by
+  rintro x ⟨hx, _⟩
+  exact hx
+
+lemma sep_eq_vertexSet_inter_compl : H₁.sep = V(H₁.val) ∩ V(H₁ᶜ.val) := by
+  ext x
+  rw [compl_vertexSet, inter_union_distrib_left, mem_union]
+  simp only [mem_sep_iff, mem_diff, inter_diff_self, mem_empty_iff_false, mem_inter_iff,
+    mem_endSetSet_iff, false_or]
+
+@[simp]
+lemma sep_subset_compl (H : G.Subgraph) : H.sep ⊆ V(Hᶜ.val) := by
+  simp [sep_eq_vertexSet_inter_compl]
+
+lemma inf_compl_eq_bot_iff : H₁ ⊓ H₁ᶜ = ⊥ ↔ H₁.val ≤c G := by
+  refine ⟨fun h => ⟨H₁.prop, fun e x hex hxH ↦ ?_⟩, fun h => ?_⟩
+  · by_contra! he
+    apply_fun Graph.vertexSet ∘ Subtype.val at h
+    simp only [comp_apply, coe_inf, inter_vertexSet, ← sep_eq_vertexSet_inter_compl, coe_bot,
+      bot_vertexSet, eq_empty_iff_forall_notMem] at h
+    exact h x ⟨hxH, by use e, ⟨hex.edge_mem, he⟩⟩
+  refine Subtype.ext ?_
+  simp only [coe_inf, coe_bot, inter_eq_bot_iff, compl_vertexSet]
+  ext x
+  simp +contextual only [mem_inter_iff, mem_union, mem_diff, mem_endSetSet_iff, mem_empty_iff_false,
+    iff_false, not_and, not_true_eq_false, and_false, false_or, not_exists, and_imp]
+  rintro hxH e he heH hex
+  exact heH <| h.closed hex hxH
 
 end Subgraph
 
@@ -638,6 +821,11 @@ lemma eq_ambient_of_subset_vertexSet (h : V(G) ⊆ V(H.val)) : H = ⊤ := by
   rw [← Subtype.coe_le_coe, ← H.coe_eq_induce, ← hV, induce_vertexSet_self]
   rfl
 
+@[simp, push]
+lemma ne_bot_iff : H ≠ ⊥ ↔ V(H.val).Nonempty := by
+  rw [← Graph.ne_bot_iff]
+  simp
+
 lemma le_iff_vertexSet_subset : H₁ ≤ H₂ ↔ V(H₁.val) ⊆ V(H₂.val) := by
   rw [← Subtype.coe_le_coe, ← H₁.coe_eq_induce, ← H₂.coe_eq_induce]
   exact induce_mono_right_iff G
@@ -686,7 +874,7 @@ lemma compl_eq_of_stronglyDisjoint_union {H₁ H₂ : Graph α β}
 
 lemma isAtom_iff_isCompOf (H : G.ClosedSubgraph) : IsAtom H ↔ H.val.IsCompOf G := by
   simp only [IsAtom, ne_eq, Subtype.forall, bot_isClosedSubgraph, Subtype.mk_eq_bot_iff, IsCompOf,
-    Minimal, ← ne_bot_iff, Subtype.coe_eq_bot_iff, ge_iff_le, and_imp]
+    Minimal, ← Graph.ne_bot_iff, Subtype.coe_eq_bot_iff, ge_iff_le, and_imp]
   apply and_congr (not_iff_not.mp ?_) <| forall₂_congr fun H' hH'cl => ?_
   · simp [H.prop]
   rw [lt_iff_le_and_ne, ← and_imp, and_comm (a := ¬H' = ⊥), and_imp, and_imp]

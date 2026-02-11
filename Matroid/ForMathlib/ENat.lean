@@ -6,6 +6,18 @@ namespace ENat
 
 variable {a b c x y m n : ℕ∞}
 
+-- LinearOrderedCommMonoidWithZero ℕ∞ is not true anymore
+-- https://leanprover.zulipchat.com/#narrow/channel/116290-rss/topic/Recent.20Commits.20to.20mathlib4.3Amaster/near/566931076
+
+lemma le_one_iff_eq_zero_or_eq_one : a ≤ 1 ↔ a = 0 ∨ a = 1 := by
+  cases a with simp [Nat.le_one_iff_eq_zero_or_eq_one]
+
+lemma eq_zero_or_exists_eq_add_one (a : ℕ∞) : a = 0 ∨ ∃ i, a = i + 1 := by
+  obtain (a | a | a) := a
+  · exact .inr ⟨⊤, rfl⟩
+  · exact .inl rfl
+  exact .inr ⟨a, rfl⟩
+
 def recTopZeroCoe {C : ℕ∞ → Sort*} (top : C ⊤) (zero : C 0) (coe : (a : ℕ) → C ↑(a + 1)) (n : ℕ∞) :
     C n := by
   cases n with
@@ -20,8 +32,8 @@ def recTopZeroCoe {C : ℕ∞ → Sort*} (top : C ⊤) (zero : C 0) (coe : (a : 
 protected theorem add_eq_top : x + y = ⊤ ↔ x = ⊤ ∨ y = ⊤ :=
   WithTop.add_eq_top
 
-protected theorem add_ne_top : x + y ≠ ⊤ ↔ x ≠ ⊤ ∧ y ≠ ⊤ :=
-  by simp
+protected theorem add_ne_top : x + y ≠ ⊤ ↔ x ≠ ⊤ ∧ y ≠ ⊤ := by
+  simp
 
 protected theorem top_mul_eq_ite (a : ℕ∞) : ⊤ * a = if a = 0 then 0 else ⊤ := by
   split_ifs with h
@@ -136,6 +148,12 @@ protected lemma lt_add_one_self_iff {a : ℕ∞} : a < a + 1 ↔ a ≠ ⊤ := by
 
 @[simp]
 protected lemma lt_one_add_self_iff {a : ℕ∞} : a < 1 + a ↔ a ≠ ⊤ := by
+  simp
+
+protected lemma add_one_eq_add_one_iff {a b : ℕ∞} : a + 1 = b + 1 ↔ a = b := by
+  simp
+
+protected lemma one_add_eq_one_add_iff {a b : ℕ∞} : a + 1 = b + 1 ↔ a = b := by
   simp
 
 lemma add_sub_cancel_right (a : ℕ∞) (hb : b ≠ ⊤) : a + b - b = a := by

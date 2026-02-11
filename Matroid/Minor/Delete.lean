@@ -2,6 +2,7 @@ import Matroid.Loop
 import Matroid.ForMathlib.Matroid.Dual
 import Matroid.ForMathlib.Matroid.Closure
 import Mathlib.Combinatorics.Matroid.Minor.Delete
+import Matroid.Closure
 
 open Set
 
@@ -12,6 +13,8 @@ namespace Matroid
 section Delete
 
 variable {D D₁ D₂ R : Set α}
+
+attribute [simp] Matroid.delete_inter_ground_eq
 
 
 @[simp] lemma delete_ground_self (M : Matroid α) : M ＼ M.E = emptyOn α := by
@@ -50,6 +53,12 @@ lemma delete_restrict_eq_restrict (M : Matroid α) {D R : Set α} (hDR : Disjoin
     M ＼ D ↾ R = M ↾ R := by
   suffices ∀ ⦃I : Set α⦄, I ⊆ R → M.Indep I → Disjoint I D from ext_indep rfl <| by simpa
   exact fun I hIR _ ↦ hDR.symm.mono_left hIR
+
+lemma IsRestriction.delete (h : N ≤r M) (D : Set α) : N ＼ D ≤r M ＼ D := by
+  obtain ⟨R, hR, rfl⟩ := h
+  rw [delete_eq_restrict, delete_eq_restrict, restrict_ground_eq,
+    restrict_restrict_eq _ diff_subset]
+  exact IsRestriction.of_subset M <| diff_subset_diff_left hR
 
 lemma restrict_comap {β : Type*} (M : Matroid β) (f : α → β) (R : Set β) :
     (M ↾ R).comap f = M.comap f ↾ (f ⁻¹' R) := by
@@ -101,6 +110,15 @@ lemma Coindep.delete_nonspanning_iff (hD : M.Coindep D) :
   rw [and_iff_left hdj, ← not_spanning_iff, hD.delete_spanning_iff, and_iff_left hdj,
     not_spanning_iff]
 
+lemma Coindep.delete_coindep_iff (hD : M.Coindep D) :
+    (M ＼ D).Coindep X ↔ M.Coindep (X ∪ D) ∧ Disjoint X D := by
+  wlog hX : X ⊆ (M ＼ D).E generalizing with aux
+  · exact iff_of_false (fun h ↦ hX h.subset_ground)
+      (fun h ↦ hX <| subset_diff.2 ⟨subset_union_left.trans h.1.subset_ground, h.2⟩)
+  have hX' := subset_diff.1 hX
+  rw [coindep_iff_compl_spanning, coindep_iff_compl_spanning, hD.delete_spanning_iff, delete_ground,
+    diff_diff, union_comm, and_iff_left hX'.2, and_iff_left (by grind)]
+
 lemma girth_le_girth_delete (M : Matroid α) (D : Set α) : M.girth ≤ (M ＼ D).girth :=
     (delete_isRestriction ..).girth_ge
 
@@ -113,5 +131,14 @@ lemma Nonspanning.of_isRestriction (h : N.Nonspanning X) (hNM : N ≤r M) :
     M.Nonspanning X := by
   obtain ⟨D, hD, rfl⟩ := hNM.exists_eq_delete
   exact h.of_delete
+
+lemma Coindep.delete_isSpanningRestriction (hX : M.Coindep X) : M ＼ X ≤sr M :=
+  restrict_compl _ _ ▸ hX.compl_spanning.restrict_isSpanningRestriction
+
+lemma delete_isSpanningRestriction_iff (hX : X ⊆ M.E := by aesop_mat) :
+    M ＼ X ≤sr M ↔ M.Coindep X := by
+  refine ⟨fun h ↦ ?_, Coindep.delete_isSpanningRestriction⟩
+  rw [← diff_diff_cancel_left hX]
+  exact h.spanning.compl_coindep
 
 end Delete

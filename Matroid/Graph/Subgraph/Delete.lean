@@ -33,13 +33,13 @@ lemma edgeRestrict_eq_edgeRestrict_iff (G : Graph α β) (F₁ F₂ : Set β) :
   apply_fun edgeSet at h
   exact h
 
-@[simp]
+@[simp, grind =]
 lemma le_edgeRestrict_iff : H ≤ (G ↾ F) ↔ H ≤ G ∧ E(H) ⊆ F :=
   ⟨fun h ↦ ⟨h.trans (by simp), (edgeSet_mono h).trans (by simp)⟩,
     fun h ↦ le_of_le_le_subset_subset h.1 (by simp) (by simpa using vertexSet_mono h.1)
     <| subset_inter (edgeSet_mono h.1) h.2⟩
 
-@[simp]
+@[simp, grind .]
 lemma edgeRestrict_isSpanningSubgraph : G ↾ F ≤s G :=
   ⟨by simp, by simp⟩
 
@@ -49,6 +49,12 @@ lemma edgeRestrict_isSpanningSubgraph_edgeRestrict (h : E(G) ∩ F₁ ⊆ E(G) �
   vertexSet_eq := by simp
   isLink_of_isLink := le_of_le_le_subset_subset edgeRestrict_le edgeRestrict_le (by simp) h
   |>.isLink_of_isLink
+
+@[gcongr]
+lemma edgeRestrict_isSpanningSubgraph_edgeRestrict' (h : F₁ ⊆ F₂) :
+    G ↾ F₁ ≤s G ↾ F₂ where
+  vertexSet_eq := by simp
+  isLink_of_isLink := edgeRestrict_mono_right _ h |>.isLink_of_isLink
 
 lemma edgeRestrict_isSpanningSubgraph_edgeRestrict_iff (G : Graph α β) (F₁ F₂ : Set β) :
     G ↾ F₁ ≤s G ↾ F₂ ↔ E(G) ∩ F₁ ⊆ E(G) ∩ F₂ := by
@@ -91,21 +97,33 @@ lemma edgeDelete_le_edgeDelete_iff (G : Graph α β) (F₁ F₂ : Set β) :
   exact h
 
 @[simp]
-lemma edgeRestrict_edgeDelete (G : Graph α β) (F₁ F₂ : Set β) : G ↾ F₁ ＼ F₂ = G ↾ (F₁ \ F₂) := by
+lemma edgeRestrict_edgeDelete (G : Graph α β) (F₁ F₂ : Set β) : (G ↾ F₁) ＼ F₂ = G ↾ F₁ \ F₂ := by
   rw [edgeDelete_eq_edgeRestrict, edgeRestrict_edgeRestrict, edgeRestrict_edgeSet, diff_eq,
     ← inter_assoc, inter_comm E(G), ← inter_assoc, inter_self, inter_comm F₁, inter_assoc,
     edgeRestrict_edgeSet_inter, diff_eq]
 
-lemma edgeDelete_eq_self (G : Graph α β) (hF : Disjoint E(G) F) : G ＼ F = G := by
+lemma edgeRestrict_edgeDelete_comm (G : Graph α β) (F₁ F₂ : Set β) :
+    (G ↾ F₁) ＼ F₂ = G ＼ F₂ ↾ F₁ := by
+  conv_rhs => rw [edgeDelete_eq_edgeRestrict, edgeRestrict_edgeRestrict,
+    diff_inter_right_comm, ← edgeRestrict_edgeDelete, G.edgeRestrict_edgeSet_inter F₁]
+
+@[simp]
+lemma edgeDelete_edgeRestrict (G : Graph α β) (F₁ F₂ : Set β) : G ＼ F₁ ↾ F₂ = G ↾ (F₂ \ F₁) := by
+  rw [← edgeRestrict_edgeDelete_comm, edgeRestrict_edgeDelete]
+
+lemma edgeDelete_edgeDelete_comm (G : Graph α β) (F₁ F₂ : Set β) :
+    G ＼ F₁ ＼ F₂ = G ＼ F₂ ＼ F₁ := by
+  rw [edgeDelete_edgeDelete, union_comm, ← edgeDelete_edgeDelete]
+
+lemma edgeDelete_eq (G : Graph α β) (hF : Disjoint E(G) F) : G ＼ F = G := by
   simp [edgeDelete_eq_edgeRestrict, hF.sdiff_eq_left]
 
-lemma edgeDelete_eq_self_of_disjoint (hF : Disjoint E(G) F) : G ＼ F = G := by
+lemma edgeDelete_eq_of_disjoint (hF : Disjoint E(G) F) : G ＼ F = G := by
   rw [edgeDelete_eq_edgeRestrict]
   exact edgeRestrict_of_superset _ hF.sdiff_eq_left.symm.subset
 
-lemma edgeDelete_eq_self_iff (G : Graph α β) (F : Set β) :
-    G ＼ F = G ↔ Disjoint E(G) F := by
-  refine ⟨fun h ↦ ?_, edgeDelete_eq_self_of_disjoint⟩
+lemma edgeDelete_eq_iff (G : Graph α β) (F : Set β) : G ＼ F = G ↔ Disjoint E(G) F := by
+  refine ⟨fun h ↦ ?_, edgeDelete_eq_of_disjoint⟩
   apply_fun edgeSet at h
   simpa using h
 
@@ -131,8 +149,7 @@ lemma IsNonloopAt.isLoopAt_delete (h : G.IsNonloopAt e x) : (G ＼ {e}).IsLoopAt
   rintro h' rfl
   exact h.not_isLoopAt y h'
 
-lemma IsLoopAt.isNonloopAt_delete (h : G.IsLoopAt e x) :
-    (G ＼ {e}).IsNonloopAt = G.IsNonloopAt := by
+lemma IsLoopAt.isNonloopAt_delete (h : G.IsLoopAt e x) : (G ＼ {e}).IsNonloopAt = G.IsNonloopAt := by
   ext f y
   simp only [isNonloopAt_iff_inc_not_isLoopAt, edgeDelete_inc_iff, mem_singleton_iff, ←
     isLink_self_iff, edgeDelete_isLink, not_and, not_not]
@@ -152,6 +169,11 @@ lemma edgeDelete_isSpanningSubgraph_edgeDelete (h : E(G) \ F₁ ⊆ E(G) \ F₂)
     G ＼ F₁ ≤s G ＼ F₂ where
   vertexSet_eq := by simp
   isLink_of_isLink := edgeDelete_le_edgeDelete h |>.isLink_of_isLink
+
+@[gcongr]
+lemma edgeDelete_isSpanningSubgraph_anti_right (h : F₁ ⊆ F₂) : G ＼ F₂ ≤s G ＼ F₁ where
+  vertexSet_eq := by simp
+  isLink_of_isLink := G.edgeDelete_anti_right h |>.isLink_of_isLink
 
 @[simp]
 lemma edgeDelete_isSpanningSubgraph_edgeDelete_iff (G : Graph α β) (F₁ F₂ : Set β) :
@@ -180,9 +202,18 @@ lemma Adj.induce (h : G.Adj x y) (hx : x ∈ X) (hy : y ∈ X) : G[X].Adj x y :=
   induce_adj_iff.mpr ⟨h, hx, hy⟩
 
 @[simp]
-lemma induce_edgeSet_subset (G : Graph α β) (X : Set α) : E(G.induce X) ⊆ E(G) := by
+lemma induce_edgeSet_subset (G : Graph α β) (X : Set α) : E(G[X]) ⊆ E(G) := by
   rintro e ⟨x, y, h, -, -⟩
   exact h.edge_mem
+
+@[simp]
+lemma induce_singleton_edgeSet (G : Graph α β) (x : α) : E(G[{x}]) = {e | G.IsLoopAt e x} := by
+  simp [induce_edgeSet]
+
+@[simp]
+lemma induce_pair_edgeSet (G : Graph α β) (x y : α) : E(G, x, y) ⊆ E(G[{x, y}]) := by
+  intro e he
+  use x, y, he, by simp, by simp
 
 lemma IsLink.mem_induce_iff (hG : G.IsLink e x y) : e ∈ E(G[X]) ↔ x ∈ X ∧ y ∈ X := by
   simp only [induce_edgeSet, mem_setOf_eq]
@@ -236,6 +267,11 @@ lemma le_induce_self (h : H ≤ G) : H ≤ G[V(H)] :=
 lemma le_induce_iff (hX : X ⊆ V(G)) : H ≤ G[X] ↔ H ≤ G ∧ V(H) ⊆ X :=
   ⟨fun h ↦ ⟨h.trans (by simpa), vertexSet_mono h⟩, fun h ↦ le_induce_of_le_of_subset h.1 h.2⟩
 
+lemma diff_subset_isolatedSet_induce (G : Graph α β) (X : Set α) : X \ V(G) ⊆ I(G[X]) := by
+  intro x ⟨hxX, hx⟩
+  simp only [mem_isolatedSet_iff, isolated_iff, induce_vertexSet, hxX, and_true]
+  exact fun e he ↦ hx he.isLink_other.1.left_mem
+
 @[simp]
 lemma edgeRestrict_induce (G : Graph α β) (X : Set α) (F : Set β) : (G ↾ F)[X] = G[X] ↾ F := by
   refine Graph.ext (by simp) fun e x y ↦ ?_
@@ -245,17 +281,21 @@ lemma edgeRestrict_induce (G : Graph α β) (X : Set α) (F : Set β) : (G ↾ F
 lemma induce_isInducedSubgraph (hX : X ⊆ V(G)) : G[X] ≤i G := ⟨by simpa, by simp_all⟩
 
 lemma IsInducedSubgraph.induce_vertexSet_eq (h : H ≤i G) : G[V(H)] = H := by
-  have hle : G[V(H)] ≤ G := by simp [vertexSet_mono h.le]
+  have hle : G[V(H)] ≤ G := by simp [h.vertexSet_mono]
   refine G.ext_of_le_le hle h.le (by simp) <| Set.ext fun e ↦ ?_
   simp only [induce_edgeSet, mem_setOf_eq]
   refine ⟨fun ⟨x, y, h', hx, hy⟩ ↦ (h.isLink_of_mem_mem h' hx hy).edge_mem, fun h' ↦ ?_⟩
   obtain ⟨x, y, hxy⟩ := exists_isLink_of_mem_edgeSet h'
   exact ⟨x, y, hxy.of_le h.le, hxy.left_mem, hxy.right_mem⟩
 
+-- @[gcongr]
+lemma induce_isInducedSubgraph_mono_right (h : X ⊆ Y) : G[X] ≤i G[Y] :=
+  ⟨G.induce_mono_right h, by simp_all⟩
+
 @[simp]
 lemma induce_isInducedSubgraph_induce_iff (G : Graph α β) (X Y : Set α) :
     G[X] ≤i G[Y] ↔ X ⊆ Y := by
-  refine ⟨fun h ↦ ?_, fun h ↦ ⟨G.induce_mono_right h, by simp_all⟩⟩
+  refine ⟨fun h ↦ ?_, induce_isInducedSubgraph_mono_right⟩
   grw [← G.induce_vertexSet X, ← G.induce_vertexSet Y, h.le]
 
 @[gcongr]
@@ -266,7 +306,7 @@ lemma isSpanningSubgraph_of_induce (h : H ≤ G) (X : Set α) : H[X] ≤s G[X] w
 /-- An induced subgraph is precisely a subgraph of the form `G[X]` for some `X ⊆ V(G)`.
 This version of the lemma can be used with `subst` or `obtain rfl` to replace `H` with `G[X]`. -/
 lemma IsInducedSubgraph.exists_eq_induce (h : H ≤i G) : ∃ X ⊆ V(G), H = G[X] :=
-  ⟨V(H), vertexSet_mono h.le, h.induce_vertexSet_eq.symm⟩
+  ⟨V(H), h.vertexSet_mono, h.induce_vertexSet_eq.symm⟩
 
 lemma IsInducedSubgraph.eq_of_isSpanningSubgraph (hi : H ≤i G) (hs : H ≤s G) : H = G := by
   obtain ⟨X, hX, rfl⟩ := hi.exists_eq_induce
@@ -281,11 +321,16 @@ lemma induce_isInducedSubgraph_iff : G[X] ≤i G ↔ X ⊆ V(G) := by
 lemma vertexDelete_isInducedSubgraph (G : Graph α β) (X : Set α) : G - X ≤i G :=
   ⟨vertexDelete_le, by simp_all⟩
 
+@[simp]
 lemma vertexDelete_eq_bot_iff (G : Graph α β) (X : Set α) : G - X = ⊥ ↔ V(G) ⊆ X := by
   refine ⟨fun h ↦ ?_, fun h ↦ ?_⟩
   · apply_fun vertexSet at h
     simpa [diff_eq_empty] using h
   simp [vertexDelete_def, diff_eq_empty.mpr h]
+
+@[simp]
+lemma bot_vertexDelete : (⊥ : Graph α β) - X = ⊥ := by
+  simp [vertexDelete_def]
 
 @[simp]
 lemma vertexDelete_adj_iff (G : Graph α β) (X : Set α) :
@@ -295,6 +340,12 @@ lemma vertexDelete_adj_iff (G : Graph α β) (X : Set α) :
 @[simp]
 lemma vertexDelete_vertexSet_inter (G : Graph α β) (X : Set α) : G - (V(G) ∩ X) = G - X := by
   simp [vertexDelete_def]
+
+@[simp]
+lemma vertexDelete_eq_self_iff (G : Graph α β) (X : Set α) : G - X = G ↔ Disjoint V(G) X := by
+  refine ⟨fun h ↦ ?_, fun h ↦ (G.vertexDelete_isInducedSubgraph X).eq_of_vertexSet (by simpa)⟩
+  rw [← h, vertexDelete_vertexSet]
+  exact disjoint_sdiff_left
 
 lemma IsLink.mem_vertexDelete_iff (hG : G.IsLink e x y) : e ∈ E(G - X) ↔ x ∉ X ∧ y ∉ X := by
   rw [vertexDelete_def, hG.mem_induce_iff, mem_diff, mem_diff, and_iff_right hG.left_mem,
@@ -314,7 +365,7 @@ lemma Inc.not_mem_of_mem (h : G.Inc e x) (hx : x ∈ X) : e ∉ E(G - X) := by
   obtain rfl := h.eq_of_isLink_of_ne_left huv (fun h ↦ (hu <| h ▸ hx).elim)
   exact hx
 
-lemma Inc.not_mem_incidentEdges (h : (G - X).Inc e x) : e ∉ E(G, X) :=
+lemma Inc.not_mem_incEdges (h : (G - X).Inc e x) : e ∉ E(G, X) :=
   h.choose_spec.not_mem_incidentEdges
 
 lemma Inc.not_mem_of_vertexDelete (h : (G - X).Inc e x) : x ∉ X :=
@@ -323,7 +374,7 @@ lemma Inc.not_mem_of_vertexDelete (h : (G - X).Inc e x) : x ∉ X :=
 @[simp]
 lemma vertexDelete_inc_iff (G : Graph α β) (X : Set α) :
     (G - X).Inc e x ↔ G.Inc e x ∧ e ∉ E(G, X) := by
-  refine ⟨fun h ↦ ⟨h.of_le vertexDelete_le, h.not_mem_incidentEdges⟩,
+  refine ⟨fun h ↦ ⟨h.of_le vertexDelete_le, h.not_mem_incEdges⟩,
     fun ⟨hex, he⟩ ↦ hex.of_le_of_mem vertexDelete_le ?_⟩
   rw [vertexDelete_edgeSet_diff, mem_diff]
   exact ⟨hex.edge_mem, he⟩
@@ -335,6 +386,18 @@ lemma vertexDelete_mono_left (h : H ≤ G) (X : Set α) : H - X ≤ G - X :=
 @[gcongr]
 lemma vertexDelete_anti_right (G : Graph α β) (hXY : X ⊆ Y) : G - Y ≤ G - X :=
   induce_mono_right _ <| diff_subset_diff_right hXY
+
+lemma vertexDelete_singleton_le_edgeDelete_linkEdges (G : Graph α β) (u v : α) :
+    G - u ≤ G ＼ E(G, u, v) := by
+  refine le_of_le_le_subset_subset vertexDelete_le edgeDelete_le (by simp) ?_
+  rw [vertexDelete_singleton, vertexDelete_edgeSet_diff, edgeDelete_edgeSet, setIncEdges_singleton]
+  exact diff_subset_diff_right <| G.linkEdges_subset_incEdges_left u v
+
+@[simp]
+lemma vertexDelete_linkEdges_of_not_mem (G : Graph α β) (hu : u ∉ X) (hv : v ∉ X) :
+    E(G - X, u, v) = E(G, u, v) := by
+  ext e
+  simp [hu, hv]
 
 lemma edgeRestrict_vertexDelete (G : Graph α β) (F : Set β) (D : Set α) :
     (G ↾ F) - D = (G - D) ↾ F := by
@@ -352,6 +415,18 @@ lemma induce_vertexDelete (G : Graph α β) (X D : Set α) : G[X] - D = G[X \ D]
   Graph.ext rfl <| by
   simp only [vertexDelete_isLink_iff, induce_isLink, mem_diff]
   tauto
+
+@[simp]
+lemma edgeDelete_vertexDelete (G : Graph α β) (F : Set β) (X : Set α) :
+    (G ＼ F) - X = (G - X) ＼ F := by
+  rw [edgeDelete_eq_edgeRestrict, edgeRestrict_vertexDelete, ← edgeRestrict_inter_edgeSet,
+    diff_inter_right_comm, inter_eq_right.mpr (edgeSet_mono vertexDelete_le),
+    ← edgeDelete_eq_edgeRestrict]
+
+lemma vertexDelete_edgeDelete_incidentEdges (G : Graph α β) (X : Set α) :
+    G ＼ E(G, X) - X = G - X := by
+  rw [edgeDelete_vertexDelete, edgeDelete_eq_iff, vertexDelete_edgeSet_diff]
+  exact disjoint_sdiff_left
 
 lemma vertexDelete_vertexDelete (G : Graph α β) (X Y : Set α) : (G - X) - Y = G - (X ∪ Y) := by
   rw [G.vertexDelete_def, induce_vertexDelete, diff_diff, ← vertexDelete_def]
@@ -393,6 +468,21 @@ lemma IsSpanningSubgraph.vertexDelete (h : H ≤s G) (X : Set α) : H - X ≤s G
   vertexSet_eq := by simp [h.vertexSet_eq]
   isLink_of_isLink := vertexDelete_mono_left h.le X |>.isLink_of_isLink
 
+@[gcongr]
+lemma IsClosedSubgraph.vertexDelete (h : H ≤c G) (X : Set α) : H - X ≤c G - X where
+  le := vertexDelete_mono_left h.le X
+  closed e x he hx := by
+    simp only [vertexDelete_vertexSet, mem_diff, vertexDelete_inc_iff, mem_setIncEdges_iff,
+      not_exists, not_and, vertexDelete_edgeSet, mem_setOf_eq] at hx he ⊢
+    obtain ⟨⟨y, hxy⟩, hinc⟩ := he
+    use x, y, h.isLink_iff_of_mem hx.1 |>.mpr hxy, hx.2, mt (hinc y) (by simp [hxy.inc_right])
+
+lemma IsClosedSubgraph.vertexDelete_of_disjoint (h : H ≤c G) (hS : Disjoint V(H) X) :
+    H ≤c G - X where
+  le := (G.vertexDelete_isInducedSubgraph X).le_of_le_subset h.le
+    (by simp [subset_diff, hS, h.vertexSet_mono])
+  closed e x hex hx := h.closed (hex.of_le vertexDelete_le) hx
+
 lemma IsClosedSubgraph.diff {H₁ H₂ : Graph α β} (h₁ : H₁ ≤c G) (h₂ : H₂ ≤c G) :
     H₁ - V(H₂) ≤c G where
   le := vertexDelete_le.trans h₁.le
@@ -420,5 +510,19 @@ lemma IsClosedSubgraph.of_edgeDelete_iff (hclF : H ≤c G ＼ F) : H ≤c G ↔ 
       obtain ⟨u, v, heuv, hunH, hvnH⟩ := hF ⟨he.edge_mem, heF⟩
       obtain rfl | rfl := he.eq_or_eq_of_isLink heuv <;> exact (‹x ∉ V(H)› hxH).elim
     exact hclF.closed (by simp [he, heF]) hxH
+
+@[gcongr, grind =>]
+lemma IsClosedSubgraph.edgeRestrict (h : H ≤c G) (F : Set β) : H ↾ F ≤c G ↾ F where
+  le := by grw [h.le]
+  closed e x hex hx := by
+    obtain ⟨heG, heF⟩ := by simpa using hex.edge_mem
+    exact ⟨h.closed (hex.of_le edgeRestrict_le) hx, heF⟩
+
+@[gcongr, grind =>]
+lemma IsClosedSubgraph.edgeDelete (h : H ≤c G) (F : Set β) : H ＼ F ≤c G ＼ F where
+  le := by grw [h.le]
+  closed e x hex hx := by
+    obtain ⟨heG, heF⟩ := by simpa using hex.edge_mem
+    exact ⟨h.closed (hex.of_le edgeDelete_le) hx, heF⟩
 
 end Graph
