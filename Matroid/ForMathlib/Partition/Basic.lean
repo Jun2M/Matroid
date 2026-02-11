@@ -1,6 +1,5 @@
 import Mathlib.Order.CompactlyGenerated.Basic
 import Mathlib.Tactic.ApplyFun
-import Matroid.ForMathlib.Lattice
 import Matroid.ForMathlib.Relation
 import Matroid.ForMathlib.Function -- for Function.onFun_comp
 
@@ -206,9 +205,8 @@ def ofIndependent' (hs : sSupIndep u) : Partition α :=
   indep := by simp
   bot_not_mem := by simp
 
-instance : OrderBot (Partition α) where
+instance : Bot (Partition α) where
   bot := Partition.empty α
-  bot_le _ _ hs := hs.elim
 
 @[simp] lemma parts_bot (α : Type*) [CompleteLattice α] : (⊥ : Partition α).parts = ∅ := rfl
 
@@ -496,7 +494,7 @@ lemma parts_top_subset : ((⊤ : Partition α) : Set α) ⊆ {⊤} := by
   simp
 
 instance : OrderBot (Partition α) where
-  bot_le a s hs := by simp only [notMem_bot] at hs
+  bot_le _ _ hs := hs.elim
 
 @[simp]
 lemma bot_parts : (⊥ : Partition α).parts = ∅ := rfl

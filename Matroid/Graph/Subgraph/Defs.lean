@@ -10,7 +10,7 @@ open Set Function
 namespace Graph
 
 /-- Restrict `G : Graph α β` to the edges in a set `E₀` without removing vertices -/
-@[simps]
+@[simps (attr := grind =)]
 def edgeRestrict (G : Graph α β) (E₀ : Set β) : Graph α β where
   vertexSet := V(G)
   edgeSet := E(G) ∩ E₀
@@ -21,13 +21,20 @@ def edgeRestrict (G : Graph α β) (E₀ : Set β) : Graph α β where
     fun ⟨x, y, h⟩ ↦ ⟨h.2.edge_mem, h.1⟩⟩
   left_mem_of_isLink _ _ _ h := h.2.left_mem
 
+attribute [grind =] edgeRestrict_vertexSet edgeRestrict_edgeSet edgeRestrict_isLink
+
 /-- `G ↾ F` is the subgraph of `G` restricted to the edges in `F`. Vertices are not changed. -/
 scoped infixl:65 " ↾ "  => Graph.edgeRestrict
 
-@[simp]
+@[simp, grind .]
 lemma edgeRestrict_le {E₀ : Set β} : G ↾ E₀ ≤ G where
   vertex_subset := rfl.le
   isLink_of_isLink := by simp
+
+@[simp]
+lemma edgeRestrict_eq_iff (G : Graph α β) (E₀ : Set β) : G ↾ E₀ = G ↔ E(G) ⊆ E₀ :=
+  ⟨fun h ↦ by simpa using edgeSet_mono h.ge,
+    fun h ↦ ext_of_le_le edgeRestrict_le le_rfl (by simp) (by simpa)⟩
 
 @[simp]
 lemma edgeRestrict_self (G : Graph α β) : G ↾ E(G) = G :=
@@ -69,7 +76,7 @@ lemma edgeRestrict_edgeRestrict (G : Graph α β) (F₁ F₂ : Set β) : (G ↾ 
 
 /-- Delete a set `F` of edges from `G`. This is a special case of `edgeRestrict`,
 but we define it with `copy` so that the edge set is definitionally equal to `E(G) \ F`. -/
-@[simps!]
+@[simps! (attr := grind =)]
 def edgeDelete (G : Graph α β) (F : Set β) : Graph α β :=
   (G.edgeRestrict (E(G) \ F)).copy (E := E(G) \ F)
   (IsLink := fun e x y ↦ G.IsLink e x y ∧ e ∉ F) rfl
@@ -78,11 +85,13 @@ def edgeDelete (G : Graph α β) (F : Set β) : Graph α β :=
     simp only [edgeRestrict_isLink, mem_diff, and_comm, and_congr_left_iff, and_iff_left_iff_imp]
     exact fun h _ ↦ h.edge_mem)
 
+attribute [grind =] edgeDelete_vertexSet edgeDelete_edgeSet edgeDelete_isLink
+
 /-- `G ＼ F` is the subgraph of `G` with the edges in `F` deleted. Vertices are not changed. -/
-scoped infixl:65 " ＼ "  => Graph.edgeDelete
+scoped infixl:75 " ＼ "  => Graph.edgeDelete
 
 lemma edgeDelete_eq_edgeRestrict (G : Graph α β) (F : Set β) :
-    G ＼ F = G ↾ (E(G) \ F) := copy_eq_self ..
+    G ＼ F = G ↾ (E(G) \ F) := copy_eq ..
 
 @[simp]
 lemma edgeDelete_le : G ＼ F ≤ G := by
@@ -120,7 +129,7 @@ lemma edgeDelete_edgeDelete (G : Graph α β) (F₁ F₂ : Set β) : G ＼ F₁ 
 The edges are the edges of `G` with both ends in `X`.
 (`X` is not required to be a subset of `V(G)` for this definition to work,
 even though this is the standard use case) -/
-@[simps! vertexSet isLink]
+@[simps! (attr := grind =) vertexSet isLink]
 protected def induce (G : Graph α β) (X : Set α) : Graph α β where
   vertexSet := X
   IsLink e x y := G.IsLink e x y ∧ x ∈ X ∧ y ∈ X
@@ -140,7 +149,7 @@ lemma induce_le_iff : G[X] ≤ G ↔ X ⊆ V(G) :=
 
 /-- This is too annoying to be a simp lemma. -/
 lemma induce_edgeSet (G : Graph α β) (X : Set α) :
-    E(G.induce X) = {e | ∃ x y, G.IsLink e x y ∧ x ∈ X ∧ y ∈ X} := rfl
+    E(G[X]) = {e | ∃ x y, G.IsLink e x y ∧ x ∈ X ∧ y ∈ X} := rfl
 
 @[simp]
 lemma induce_empty (G : Graph α β) : G[∅] = ⊥ := by
@@ -154,13 +163,23 @@ lemma induce_vertexSet_self (G : Graph α β) : G[V(G)] = G := by
   exact ⟨x, y, h, h.left_mem, h.right_mem⟩
 
 /-- The graph obtained from `G` by deleting a set of vertices. -/
-@[simps! vertexSet]
 protected def vertexDelete (G : Graph α β) (X : Set α) : Graph α β := G[V(G) \ X]
 
 /-- `G - X` is the graph obtained from `G` by deleting the set `X` of vertices. -/
-notation:max G:1000 " - " S:1000 => Graph.vertexDelete G S
+instance : HSub (Graph α β) (Set α) (Graph α β) where
+  hSub G X := G[V(G) \ X]
+
+instance : HSub (Graph α β) α (Graph α β) where
+  hSub G x := G - ({x} : Set α)
+-- scoped notation:51 G:100 " - " S:100 => Graph.vertexDelete G S
 
 lemma vertexDelete_def (G : Graph α β) (X : Set α) : G - X = G [V(G) \ X] := rfl
+
+@[simp]
+lemma vertexDelete_singleton (G : Graph α β) (x : α) : G - x = G - ({x} : Set α) := rfl
+
+@[simp]
+lemma vertexDelete_vertexSet (G : Graph α β) (X : Set α) : V(G - X) = V(G) \ X := rfl
 
 @[simp]
 lemma vertexDelete_isLink_iff (G : Graph α β) (X : Set α) :
@@ -185,7 +204,7 @@ lemma vertexDelete_edgeSet_diff (G : Graph α β) (X : Set α) : E(G - X) = E(G)
   use x, y
 
 @[simp]
-lemma vertexDelete_empty (G : Graph α β) : G - ∅ = G := by
+lemma vertexDelete_empty (G : Graph α β) : G - (∅ : Set α) = G := by
   simp [vertexDelete_def]
 
 @[simp]
@@ -212,8 +231,27 @@ structure StronglyDisjoint (G H : Graph α β) : Prop where
   vertex : Disjoint V(G) V(H)
   edge : Disjoint E(G) E(H)
 
+@[symm]
 lemma StronglyDisjoint.symm (h : G.StronglyDisjoint H) : H.StronglyDisjoint G :=
   ⟨h.1.symm, h.2.symm⟩
+
+instance : Std.Symm (StronglyDisjoint : Graph α β → Graph α β → Prop) where
+  symm _ _ := StronglyDisjoint.symm
+
+lemma StronglyDisjoint.anti_left (h : G.StronglyDisjoint H) (h₁ : H₁ ≤ G) :
+    H₁.StronglyDisjoint H where
+  vertex := h.vertex.mono_left (vertexSet_mono h₁)
+  edge := h.edge.mono_left (edgeSet_mono h₁)
+
+lemma StronglyDisjoint.anti_right (h : G.StronglyDisjoint H) (h₂ : H₂ ≤ H) :
+    G.StronglyDisjoint H₂ where
+  vertex := h.vertex.mono_right (vertexSet_mono h₂)
+  edge := h.edge.mono_right (edgeSet_mono h₂)
+
+lemma StronglyDisjoint.anti (h : G.StronglyDisjoint H) (h₁ : H₁ ≤ G) (h₂ : H₂ ≤ H) :
+    H₁.StronglyDisjoint H₂ where
+  vertex := h.vertex.mono (vertexSet_mono h₁) (vertexSet_mono h₂)
+  edge := h.edge.mono (edgeSet_mono h₁) (edgeSet_mono h₂)
 
 lemma StronglyDisjoint_iff_of_le_le (h₁ : H₁ ≤ G) (h₂ : H₂ ≤ G) :
     StronglyDisjoint H₁ H₂ ↔ Disjoint V(H₁) V(H₂) := by
@@ -242,9 +280,11 @@ lemma CompatibleAt.comm : CompatibleAt e G H ↔ CompatibleAt e H G :=
 
 lemma compatibleAt_self : CompatibleAt e G G := fun _ _ ↦ rfl
 
-instance {e : β} : IsRefl (Graph α β) (CompatibleAt e) := ⟨fun _ _ _ ↦ rfl⟩
+instance {e : β} : Std.Refl (CompatibleAt e : Graph α β → Graph α β → Prop) where
+  refl _ _ _ := rfl
 
-instance {e : β} : IsSymm (Graph α β) (CompatibleAt e) := ⟨fun _ _ ↦ CompatibleAt.symm⟩
+instance {e : β} : Std.Symm (CompatibleAt e : Graph α β → Graph α β → Prop) where
+  symm _ _ := CompatibleAt.symm
 
 
 /-- Two graphs are `Compatible` if the edges in their intersection agree on their ends -/
@@ -270,14 +310,14 @@ lemma Compatible.isLink_eq (h : G.Compatible H) (heG : e ∈ E(G)) (heH : e ∈ 
 lemma compatible_self (G : Graph α β) : G.Compatible G :=
   eqOn_refl ..
 
-instance : IsRefl (Graph α β) Compatible where
+instance : Std.Refl (Compatible : Graph α β → Graph α β → Prop) where
   refl G := G.compatible_self
 
 @[symm]
 lemma Compatible.symm (h : G.Compatible H) : H.Compatible G := by
   rwa [Compatible, inter_comm, eqOn_comm]
 
-instance : IsSymm (Graph α β) Compatible where
+instance : Std.Symm (Compatible : Graph α β → Graph α β → Prop) where
   symm _ _ := Compatible.symm
 
 lemma IsLink.of_compatible (h : G.IsLink e x y) (hGH : G.Compatible H) (heH : e ∈ E(H)) :
@@ -307,7 +347,7 @@ lemma singleEdge_compatible_iff :
 
 /-- The intersection of a nonempty family of pairwise compatible graphs.
   Remove any disagreeing edges. -/
-@[simps]
+@[simps (attr := grind =)]
 protected def iInter [Nonempty ι] (G : ι → Graph α β) : Graph α β where
   vertexSet := ⋂ i, V(G i)
   edgeSet := {e | ∃ x y, ∀ i, (G i).IsLink e x y}
@@ -334,7 +374,7 @@ lemma le_iInter_iff [Nonempty ι] {G : ι → Graph α β} :
   use x, y, fun i ↦ hbtw.of_le (h i)
 
 /-- The intersection of a nonempty set of pairwise compatible graphs. -/
-@[simps!]
+@[simps! (attr := grind =)]
 protected def sInter (s : Set (Graph α β)) (hne : s.Nonempty) : Graph α β :=
   @Graph.iInter _ _ _ hne.to_subtype (fun G : s ↦ G.1)
 
@@ -418,7 +458,7 @@ instance : SemilatticeInf (Graph α β) where
 --   left_mem_of_isLink := fun e x y ⟨⟨i, hi⟩,h⟩ ↦ mem_iUnion.2 ⟨i, hi.left_mem⟩
 
 /-- The union of an indexed family of pairwise compatible graphs. -/
-@[simps]
+@[simps (attr := grind =)]
 protected def iUnion (G : ι → Graph α β) (hG : Pairwise (Graph.Compatible on G)) : Graph α β where
   vertexSet := ⋃ i, V(G i)
   edgeSet := ⋃ i, E(G i)
@@ -443,7 +483,7 @@ protected lemma iUnion_le_iff {G : ι → Graph α β} (hG : Pairwise (Graph.Com
     fun h' ↦ ⟨by simp [fun i ↦ vertexSet_mono (h' i)], fun e x y ⟨i, h⟩ ↦ h.of_le (h' i)⟩⟩
 
 /-- The union of a set of pairwise compatible graphs. -/
-@[simps!]
+@[simps! (attr := grind =)]
 protected def sUnion (s : Set (Graph α β)) (hs : s.Pairwise Compatible) : Graph α β :=
   .iUnion (fun G : s ↦ G.1) <| (pairwise_subtype_iff_pairwise_set s Compatible).2 hs
 
@@ -527,7 +567,7 @@ lemma Compatible.union_le_iff {H₁ H₂ : Graph α β} (h_compat : H₁.Compati
 
 /-- Add a new edge `e` between vertices `a` and `b`. If `e` is already in the graph,
 its ends change to `a` and `b`. -/
-@[simps! edgeSet vertexSet]
+@[simps! (attr := grind =) edgeSet vertexSet]
 protected def addEdge (G : Graph α β) (e : β) (a b : α) : Graph α β :=
   Graph.singleEdge a b e ∪ G
 

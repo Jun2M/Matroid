@@ -205,6 +205,22 @@ variable {s t r : Set α}
 @[simp] lemma pair_nontrivial_iff {x y : α} : ({x,y} : Set α).Nontrivial ↔ x ≠ y :=
   ⟨by rintro h rfl; simp at h, nontrivial_pair⟩
 
+lemma pairwise_on_bool' {α : Type*} {r : α → α → Prop} {f : Bool → α} (b : Bool) :
+    Pairwise (r on f) ↔ r (f b) (f !b) ∧ r (f !b) (f b) := by
+  simp_rw [Pairwise, b.forall_bool']
+  simp
+
+lemma pairwise_disjoint_on_bool' {α : Type*} {f : Bool → Set α} :
+    Pairwise (Disjoint on f) ↔ Disjoint (f true) (f false) := by
+  rw [pairwise_on_bool' true, Bool.not_true, disjoint_comm, and_self]
+
+lemma pairwise_disjoint_on_bool'' {α : Type*} {f : Bool → Set α} (b : Bool) :
+    Pairwise (Disjoint on f) ↔ Disjoint (f b) (f !b) := by
+  rw [pairwise_on_bool', disjoint_comm, and_self]
+
+lemma iUnion_bool' {α : Type*} (f : Bool → Set α) (b : Bool) : ⋃ i, f i = f b ∪ f !b := by
+  cases b <;> simp [iUnion_bool, union_comm]
+
 lemma diff_singleton_diff_eq (s t : Set α) (x : α) : (s \ {x}) \ t = s \ (insert x t) := by
   rw [diff_diff, singleton_union]
 
@@ -239,3 +255,11 @@ lemma forall_mem_and {α : Type*} {p q : α → Prop} {s : Set α} :
     (∀ x ∈ s, p x ∧ q x) ↔ (∀ x ∈ s, p x) ∧ (∀ x ∈ s, q x) :=
   ⟨fun h ↦ ⟨fun x hx ↦ (h x hx).1, fun x hx ↦ (h x hx).2⟩,
     fun ⟨hp, hq⟩ x hx ↦ ⟨hp x hx, hq x hx⟩⟩
+
+lemma biUnion_congr {α ι : Type*} {p : Set ι} {s t : ι → Set α}
+    (h : ∀ i ∈ p, s i = t i) : ⋃ i ∈ p, s i = ⋃ i ∈ p, t i :=
+  iUnion₂_congr h
+
+lemma biInter_congr {α ι : Type*} {p : Set ι} {s t : ι → Set α}
+    (h : ∀ i ∈ p, s i = t i) : ⋂ i ∈ p, s i = ⋂ i ∈ p, t i :=
+  iInter₂_congr h

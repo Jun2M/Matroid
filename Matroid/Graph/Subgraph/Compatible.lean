@@ -14,7 +14,7 @@ lemma Option.elim_eq_const_of_isEmpty {α : Type*} [hα : IsEmpty α] (f : α �
   | none => rfl
   | some a => hα.elim a
 
-instance {ι α : Type*} {r : α → α → Prop} [IsRefl α r] {f : ι → α} : IsRefl ι (r on f) where
+instance {ι : Type*} {r : α → α → Prop} [Std.Refl r] {f : ι → α} : Std.Refl (r on f) where
   refl i := refl (f i)
 
 open scoped Sym2
@@ -37,32 +37,6 @@ lemma compatibleAt_of_notMem_left (he : e ∉ E(G)) : CompatibleAt e G H := by
 
 lemma compatibleAt_of_notMem_right (he : e ∉ E(H)) : CompatibleAt e G H := by
   simp [CompatibleAt, he]
-
-lemma IsLink.compatibleAt_iff_left (hIsLink : G.IsLink e x y) :
-    CompatibleAt e G H ↔ (e ∈ E(H) → H.IsLink e x y) :=
-  ⟨fun h heH ↦ by rwa [← CompatibleAt.isLink_iff h hIsLink.edge_mem heH], fun h heG heH ↦
-  (isLink_eq_isLink_iff_exists_isLink_of_mem_edgeSet heG).mpr ⟨x, y, hIsLink, h heH⟩⟩
-
-lemma IsLink.compatibleAt_iff_right (h : H.IsLink e x y) :
-    CompatibleAt e G H ↔ (e ∈ E(G) → G.IsLink e x y) := by
-  rw [CompatibleAt.comm]
-  exact compatibleAt_iff_left h
-
-lemma IsLink.of_compatibleAt (he : G.IsLink e x y) (h : CompatibleAt e G H) (heH : e ∈ E(H)) :
-    H.IsLink e x y := (he.compatibleAt_iff_left).mp h heH
-
-lemma CompatibleAt.mono_left {G₀ : Graph α β} (h : CompatibleAt e G H) (hle : G₀ ≤ G) :
-    CompatibleAt e G₀ H :=
-  compatibleAt_def.2 fun heG₀ heH _ _ ↦ ⟨fun h' ↦ (h'.of_le hle).of_compatibleAt h heH,
-    fun h' ↦ (h'.of_compatibleAt h.symm (edgeSet_mono hle heG₀)).of_le_of_mem hle heG₀⟩
-
-lemma CompatibleAt.mono_right {H₀ : Graph α β} (h : CompatibleAt e G H) (hH₀ : H₀ ≤ H) :
-    CompatibleAt e G H₀ :=
-  (h.symm.mono_left hH₀).symm
-
-lemma CompatibleAt.mono {G₀ H₀ : Graph α β} (h : CompatibleAt e G H) (hG : G₀ ≤ G) (hH : H₀ ≤ H) :
-    CompatibleAt e G₀ H₀ :=
-  (h.mono_left hG).mono_right hH
 
 lemma CompatibleAt.induce_left (h : CompatibleAt e G H) (X : Set α) : CompatibleAt e G[X] H := by
   rintro ⟨x, y, ⟨he, hx, hy⟩⟩ heH

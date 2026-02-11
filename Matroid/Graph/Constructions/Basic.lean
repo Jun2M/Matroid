@@ -1,5 +1,6 @@
 import Matroid.Graph.Subgraph.Basic
 import Mathlib.Data.PFun
+import Mathlib.Combinatorics.SimpleGraph.Basic
 
 variable {α β : Type*} {x y z u v w a b : α} {e f : β} {G H : Graph α β} {F F₁ F₂ : Set β}
   {X Y V : Set α}
@@ -11,7 +12,7 @@ open scoped Sym2
 namespace Graph
 
 /-- The graph with vertex set `V` and no edges -/
-@[simps]
+@[simps (attr := grind =)]
 protected def noEdge (V : Set α) (β : Type*) : Graph α β where
   vertexSet := V
   edgeSet := ∅
@@ -66,7 +67,10 @@ instance : OrderBot (Graph α β) where
 lemma bot_vertexSet : V((⊥ : Graph α β)) = ∅ := rfl
 
 @[simp]
-lemma bot_edgeSet : V((⊥ : Graph α β)) = ∅ := rfl
+lemma bot_edgeSet : E((⊥ : Graph α β)) = ∅ := rfl
+
+instance : IsEmpty V((⊥ : Graph α β)) := isEmpty_coe_sort.mpr rfl
+instance : IsEmpty E((⊥ : Graph α β)) := isEmpty_coe_sort.mpr rfl
 
 @[simp]
 lemma bot_isClosedSubgraph (G : Graph α β) : ⊥ ≤c G where
@@ -95,8 +99,12 @@ lemma vertexSet_eq_empty_iff : V(G) = ∅ ↔ G = ⊥ := by
   refine ⟨fun h ↦ bot_le.antisymm' ⟨by simp [h], fun e x y he ↦ False.elim ?_⟩, fun h ↦ by simp [h]⟩
   simpa [h] using he.left_mem
 
-@[push]
+@[push, simp]
 lemma ne_bot_iff : G ≠ ⊥ ↔ V(G).Nonempty := not_iff_not.mp <| by
+  simp [not_nonempty_iff_eq_empty]
+
+@[push, simp]
+lemma vertexSet_not_nonempty_iff : ¬ V(G).Nonempty ↔ G = ⊥ := by
   simp [not_nonempty_iff_eq_empty]
 
 lemma ne_bot_of_mem_vertexSet (h : x ∈ V(G)) : G ≠ ⊥ :=
@@ -106,7 +114,7 @@ instance : Inhabited (Graph α β) where
   default := ⊥
 
 /-- A graph with a single edge `e` from `u` to `v` -/
-@[simps]
+@[simps (attr := grind =)]
 protected def singleEdge (u v : α) (e : β) : Graph α β where
   vertexSet := {u,v}
   edgeSet := {e}
@@ -148,7 +156,7 @@ lemma singleEdge_le_iff : Graph.singleEdge u v e ≤ G ↔ G.IsLink e u v := by
 /-! ### Graphs with one vertex  -/
 
 /-- A graph with one vertex and loops at that vertex -/
-@[simps]
+@[simps (attr := grind =)]
 def bouquet (v : α) (F : Set β) : Graph α β where
   vertexSet := {v}
   edgeSet := F
@@ -176,7 +184,7 @@ lemma bouquet_adj_iff : (bouquet v F).Adj x y ↔ F.Nonempty ∧ x = v ∧ y = v
   exact fun _ _ ↦ Iff.rfl
 
 /-- Every graph on just one vertex is a bouquet on that vertex-/
-lemma eq_bouquet (hv : v ∈ V(G)) (hss : V(G).Subsingleton) : G = bouquet v E(G) := by
+lemma eq_bouquet_of_mem (hv : v ∈ V(G)) (hss : V(G).Subsingleton) : G = bouquet v E(G) := by
   have hrw := hss.eq_singleton_of_mem hv
   refine Graph.ext_inc (by simpa) fun e x ↦ ⟨fun h ↦ ?_, fun h ↦ ?_⟩
   · simp [bouquet_inc_iff, ← mem_singleton_iff, ← hrw, h.edge_mem, h.vertex_mem]
@@ -185,12 +193,15 @@ lemma eq_bouquet (hv : v ∈ V(G)) (hss : V(G).Subsingleton) : G = bouquet v E(G
   rw [h.2, ← show z = v from (show z ∈ {v} from hrw ▸ hzw.left_mem)]
   exact hzw.inc_left
 
+lemma eq_bouquet (hV : V(G) = {v}) : G = bouquet v E(G) :=
+  eq_bouquet_of_mem (by simp [hV]) (by simp [hV])
+
 /-- Every graph on just one vertex is a bouquet on that vertex-/
 lemma exists_eq_bouquet_edge (hv : v ∈ V(G)) (hss : V(G).Subsingleton) : ∃ F, G = bouquet v F :=
-  ⟨E(G), eq_bouquet hv hss⟩
+  ⟨E(G), eq_bouquet_of_mem hv hss⟩
 
 lemma exists_eq_bouquet (hne : V(G).Nonempty) (hss : V(G).Subsingleton) : ∃ x F, G = bouquet x F :=
-  ⟨_, _, eq_bouquet hne.some_mem hss⟩
+  ⟨_, _, eq_bouquet_of_mem hne.some_mem hss⟩
 
 lemma bouquet_empty (v : α) : bouquet v ∅ = Graph.noEdge {v} β := by
   ext <;> simp
@@ -204,10 +215,26 @@ lemma bouquet_incEdges : E(bouquet v F, v) = F := by
   ext e
   simp
 
+@[simp]
+lemma bouquet_le_iff_of_mem (hv : v ∈ V(G)) (F : Set β) :
+    bouquet v F ≤ G ↔ ∀ e ∈ F, G.IsLoopAt e v := by
+  refine ⟨fun h e heF ↦ IsLoopAt.of_le (by simpa) h, fun h ↦ ⟨by simpa, ?_⟩⟩
+  rintro e x y ⟨hef, rfl, rfl⟩
+  exact h e hef
+
+@[simp]
+lemma bouquet_le_iff_of_nonempty (v : α) (hF : F.Nonempty) :
+    bouquet v F ≤ G ↔ ∀ e ∈ F, G.IsLoopAt e v := by
+  refine ⟨fun h e heF ↦ IsLoopAt.of_le (by simpa) h, fun h ↦ ⟨?_, ?_⟩⟩
+  · simp only [bouquet_vertexSet, singleton_subset_iff]
+    exact (h _ hF.some_mem).vertex_mem
+  rintro e x y ⟨hef, rfl, rfl⟩
+  exact h e hef
+
 /-! ### Two vertices -/
 
 /-- A graph with exactly two vertices and no loops. -/
-@[simps]
+@[simps (attr := grind =)]
 def banana (a b : α) (F : Set β) : Graph α β where
   vertexSet := {a,b}
   edgeSet := F
@@ -255,6 +282,10 @@ lemma banana_eq_bouquet : banana a a F = bouquet a F := by
   ext a b c <;> simp
 
 @[simp]
+lemma banana_eq_noEdge : banana a b ∅ = Graph.noEdge {a, b} β := by
+  ext <;> simp
+
+@[simp]
 lemma banana_incEdges_left : E(banana a b F, a) = F := by
   ext e
   simp
@@ -267,7 +298,7 @@ lemma banana_incEdges_right : E(banana a b F, b) = F := by
 /-! ### Complete graphs -/
 
 /-- The complete graph on `n` vertices. -/
-@[simps]
+@[simps (attr := grind =)]
 def CompleteGraph (n : ℕ) : Graph ℕ (Sym2 ℕ) where
   vertexSet := Set.Iio n
   edgeSet := {s | (∀ i ∈ s, i < n) ∧ ¬ s.IsDiag}
@@ -324,7 +355,7 @@ lemma banana_isComplete (a b : α) (hF : F.Nonempty) : (banana a b F).IsComplete
   obtain rfl | rfl := hx <;> obtain rfl | rfl := hy <;> simp [hF] at hne ⊢
 
 @[simp]
-lemma banana_isComplete_iff (a b : α) (F : Set β ) :
+lemma banana_isComplete_iff (a b : α) (F : Set β) :
     (banana a b F).IsComplete ↔ a = b ∨ F.Nonempty := by
   obtain rfl | hne := eq_or_ne a b
   · simp only [true_or, iff_true]
@@ -334,7 +365,7 @@ lemma banana_isComplete_iff (a b : α) (F : Set β ) :
   exact ⟨fun h ↦ ⟨_, h a (by simp) b (by simp) hne |>.choose_spec.edge_mem⟩, banana_isComplete a b⟩
 
 /-- The star graph with `n` leaves with center `v` -/
-@[simps]
+@[simps (attr := grind =)]
 def StarGraph (v : α) (f : β →. α) : Graph α β where
   vertexSet := {v} ∪ f.ran
   edgeSet := f.Dom
@@ -387,7 +418,7 @@ lemma starGraph_adj_iff (v : α) (f : β →. α) (x y : α) :
 
 /-- The graph with vertex set `S` and edges over `ℕ` between pairs of vertices according to the list
   `l`.-/
-@[simps]
+@[simps (attr := grind =)]
 def fromList (S : Set α) (l : List (α × α)) : Graph α ℕ where
   vertexSet := S ∪ {x | ∃ p ∈ l, x = p.1 ∨ x = p.2}
   edgeSet := Finset.range l.length
@@ -412,25 +443,56 @@ def fromList (S : Set α) (l : List (α × α)) : Graph α ℕ where
       rw [← Prod.swap_eq_iff_eq_swap] at hp
       exact List.mem_of_getElem? <| hp ▸ hep
 
+@[simps (attr := grind =)]
+def OfSimpleGraph (G : SimpleGraph α) : Graph α (Sym2 α) where
+  vertexSet := univ
+  edgeSet := {s | ∃ x y, G.Adj x y ∧ s(x, y) = s}
+  IsLink e x y := G.Adj x y ∧ s(x, y) = e
+  isLink_symm e he x y h := by use h.1.symm, Sym2.eq_swap ▸ h.2
+  eq_or_eq_of_isLink_of_isLink e x y z w h1 h2 := by
+    have := by simpa using h1.2.trans h2.2.symm
+    tauto
+  left_mem_of_isLink e x y h := by simp
 
-/-- The line graph of a graph `G` is the graph with the same vertices as `G` and edges
+@[simps (attr := grind =)]
+def OfSimpleGraphSet {S : Set α} (G : SimpleGraph S) : Graph α (Sym2 α) where
+  vertexSet := S
+  edgeSet := {s | ∃ x y, G.Adj x y ∧ s(x.val, y.val) = s}
+  IsLink e x y := ∃ (hx : x ∈ S) (hy : y ∈ S), G.Adj ⟨x, hx⟩ ⟨y, hy⟩ ∧ s(x, y) = e
+  isLink_symm e he x y h := by
+    obtain ⟨hx, hy, h, rfl⟩ := h
+    use hy, hx, h.symm, Sym2.eq_swap
+  eq_or_eq_of_isLink_of_isLink e x y z w h1 h2 := by
+    obtain ⟨-, -, -, rfl⟩ := h1
+    obtain ⟨-, -, -, heq⟩ := h2
+    have := by simpa using heq
+    tauto
+  left_mem_of_isLink e x y h := h.1
+  edge_mem_iff_exists_isLink e := ⟨fun ⟨a, b, hab, he⟩ ↦ ⟨a.val, b.val, a.prop, b.prop, hab, by
+    assumption⟩, fun ⟨x, y, hx, hy, h, heq⟩ ↦ ⟨⟨x, hx⟩, ⟨y, hy⟩, h, heq⟩⟩
+
+@[simps! (attr := grind =)]
+def LineSimpleGraph (G : Graph α β) : SimpleGraph E(G) :=
+  SimpleGraph.fromRel (fun e f ↦ ∃ x, G.Inc e x ∧ G.Inc f x)
+
+/-- The line graph of a graph `G` is the simple graph with the same vertices as `G` and edges
     given by the pairs of edges in `G` that have a common vertex. -/
-@[simps]
+@[simps (attr := grind =)]
 def LineGraph (G : Graph α β) : Graph β (Sym2 β) where
   vertexSet := E(G)
-  edgeSet := Sym2.mk '' { (e, f) | ∃ x, G.Inc e x ∧ G.Inc f x }
-  IsLink a e f := (∃ x, G.Inc e x ∧ G.Inc f x) ∧ s(e, f) = a
-  edge_mem_iff_exists_isLink a := by simp only [mem_image, mem_setOf_eq, Prod.exists]
+  edgeSet := Sym2.mk '' { (e, f) | (e ≠ f) ∧ ∃ x, G.Inc e x ∧ G.Inc f x }
+  IsLink a e f := s(e, f) = a ∧ e ≠ f ∧ ∃ x, G.Inc e x ∧ G.Inc f x
+  edge_mem_iff_exists_isLink a := by simp only [and_comm, mem_image, mem_setOf_eq, Prod.exists]
   isLink_symm a ha e f hef := by
     simp_all only [mem_image, mem_setOf_eq, Prod.exists]
-    simp_rw [and_comm, ← hef.2]
-    simp [hef.1]
+    simp_rw [and_comm, Sym2.eq_swap]
+    simp [hef.1, hef.2.1.symm, hef.2.2]
   eq_or_eq_of_isLink_of_isLink := by
-    rintro a e f g h ⟨hef, rfl⟩ ⟨hgf, heq⟩
+    rintro a e f g h ⟨rfl, hef, h⟩ ⟨heq, hgf, h'⟩
     simp only [Sym2.eq, Sym2.rel_iff', Prod.mk.injEq, Prod.swap_prod_mk] at heq
     tauto
   left_mem_of_isLink := by
-    rintro a e f ⟨⟨x, he, hf⟩, rfl⟩
+    rintro a e f ⟨rfl, hef, ⟨x, he, hf⟩⟩
     exact he.edge_mem
 
 scoped notation "L(" G ")" => LineGraph G
@@ -440,14 +502,15 @@ lemma lineGraph_inc (G : Graph α β) (s : Sym2 β) (e : β) : L(G).Inc s e ↔ 
   unfold Inc
   simp +contextual only [LineGraph_isLink, LineGraph_edgeSet, mem_image, mem_setOf_eq, Prod.exists,
     iff_def, forall_exists_index, and_imp]
-  refine ⟨fun a x he ha hs ↦ ?_, fun a b x ha hb hs hes ↦ ?_⟩ <;> subst s
-  · exact ⟨⟨e, a, ⟨x, he, ha⟩, rfl⟩, by simp⟩
+  refine ⟨fun a hs hne x he ha ↦ ?_, fun a b hne x ha hb hs hes ↦ ?_⟩ <;> subst s
+  · exact ⟨⟨e, a, ⟨hne, x, he, ha⟩, rfl⟩, by simp⟩
   obtain rfl | rfl := by simpa using hes
-  · use b, (by use x)
-  use a, (by use x), Sym2.eq_swap
+  · use b, rfl, hne, x
+  use a, Sym2.eq_swap, hne.symm, x
 
 @[simp]
-lemma lineGraph_adj_iff (G : Graph α β) (e f : β) : L(G).Adj e f ↔ ∃ x, G.Inc e x ∧ G.Inc f x := by
+lemma lineGraph_adj (G : Graph α β) (e f : β) :
+    L(G).Adj e f ↔ e ≠ f ∧ ∃ x, G.Inc e x ∧ G.Inc f x := by
   simp [Adj]
 
 lemma lineGraph_bouquet_isComplete (v : α) (F : Set β) : L(bouquet v F).IsComplete := by
@@ -464,14 +527,14 @@ lemma lineGraph_singleEdge_isComplete (u v : α) (e : β) : L(Graph.singleEdge u
 
 lemma lineGraph_starGraph_isComplete (v : α) (f : β →. α) : L(StarGraph v f).IsComplete := by
   rintro e h e'
-  simp_all only [LineGraph_vertexSet, StarGraph_edgeSet, PFun.mem_dom, ne_eq, lineGraph_adj_iff,
-    starGraph_inc_iff, and_true, forall_exists_index]
+  simp_all only [LineGraph_vertexSet, StarGraph_edgeSet, PFun.mem_dom, ne_eq, lineGraph_adj,
+    starGraph_inc_iff, and_true, forall_exists_index, not_false_iff, true_and]
   intro _ _ _
   use v
   simp
 
 /-- Note: a loop becomes a leaf. -/
-@[simps]
+@[simps (attr := grind =)]
 def mixedLineGraph (G : Graph α β) : Graph (α ⊕ β) (α × β) where
   vertexSet := Sum.inl '' V(G) ∪ Sum.inr '' E(G)
   edgeSet := {(a, b) | G.Inc b a}

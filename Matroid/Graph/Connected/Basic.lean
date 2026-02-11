@@ -12,6 +12,9 @@ namespace Graph
 lemma IsCompOf.connected (h : H.IsCompOf G) : H.Connected :=
   h.of_le_le le_rfl h.le
 
+lemma IsCompOf.preconnected (h : H.IsCompOf G) : H.Preconnected :=
+  h.connected.pre
+
 lemma walkable_connected (hx : x ∈ V(G)) : (G.walkable x).Connected :=
   (walkable_isCompOf hx).connected
 
@@ -23,25 +26,19 @@ lemma Preconnected.components_subsingleton (h : G.Preconnected) : G.Components.S
 
 lemma components_subsingleton_iff : G.Components.Subsingleton ↔ G.Preconnected := by
   refine ⟨fun h x y hx hy ↦ ?_, Preconnected.components_subsingleton⟩
-  rw [connectedBetween_iff_mem_walkable_of_mem, h (G.walkable_isCompOf hx) (G.walkable_isCompOf hy)]
+  rw [connBetween_iff_mem_walkable_of_mem, h (G.walkable_isCompOf hx) (G.walkable_isCompOf hy)]
   exact mem_walkable_self_iff.mpr hy
 
 lemma Connected.components_subsingleton (hG : G.Connected) : G.Components.Subsingleton :=
   hG.pre.components_subsingleton
 
--- @[simp]
--- lemma components_eq_singleton_iff : G.Components = {H} ↔ G = H ∧ G.Connected := by
---   refine ⟨fun h ↦ ?_, ?_⟩
---   · have hcomp : H.IsCompOf G := by
---       change H ∈ G.Components
---       simp [h]
---     suffices G = H by
---       subst G
---       simpa
---     convert G.eq_sUnion_components
---     simp [h]
---   rintro ⟨rfl, h⟩
---   exact h.components_subsingleton.eq_singleton_of_mem h
+@[simp]
+lemma connPartition_rel_iff (G : Graph α β) (x y : α): G.connPartition x y ↔ G.ConnBetween x y := by
+  simp only [connPartition, Partition.rel_iff_exists]
+  refine ⟨fun ⟨S, ⟨H, hH, hSeq⟩, hx, hy⟩ => ?_, fun h =>
+    ⟨V(G.walkable x), (by use G.walkable x, walkable_isCompOf h.left_mem), by simp [h.left_mem], h⟩⟩
+  subst S
+  exact hH.preconnected x y hx hy |>.mono hH.le
 
 lemma components_eq_singleton_iff : (∃ H, G.Components = {H}) ↔ G.Connected := by
   refine ⟨?_, ?_⟩
@@ -131,13 +128,6 @@ lemma Connected.exists_inc_notMem_of_lt (hG : G.Connected) (hlt : H < G) (hne : 
   simp only [not_exists, not_and, not_imp_not] at hcon
   exact hcon _ _ hex hx
 
-lemma Connected.of_isSpanningSubgraph (hH : H.Connected) (hle : H ≤s G) : G.Connected := by
-  rw [connected_iff_forall_closed (hH.nonempty.mono (vertexSet_mono hle.le))]
-  refine fun K hKG hKne ↦ hKG.isInducedSubgraph.eq_of_isSpanningSubgraph <|
-    hle.of_isSpanningSubgraph_right ?_ hKG.le
-  exact hH.le_of_nonempty_inter hle.le hKG
-    (by rwa [hle.vertexSet_eq, inter_eq_self_of_subset_right (vertexSet_mono hKG.le)])
-
 @[simp]
 lemma connected_bouquet (v : α) (F : Set β) : (bouquet v F).Connected := by
   suffices aux : (bouquet v (∅ : Set β)).Connected from
@@ -185,10 +175,31 @@ lemma Connected.addEdge_connected (hG : G.Connected) (hx : x ∈ V(G)) (he : e �
   rw [singleEdge_vertexSet]
   exact ⟨x, hx, by simp⟩
 
-lemma walkable_eq_induce_setOf_connectedBetween :
-    G.walkable x = G[{y | G.ConnectedBetween x y}] := by
+lemma walkable_eq_induce_setOf_connBetween : G.walkable x = G[{y | G.ConnBetween x y}] := by
   rw [walkable_isClosedSubgraph.eq_induce]
   congr
+
+lemma walkable_mono (hle : G ≤ H) (x : α) : G.walkable x ≤ H.walkable x := by
+  obtain hxG | hxG := (em <| x ∈ V(G)).symm
+  · simp [hxG]
+  have := (walkable_isCompOf <| vertexSet_mono hle hxG).isInducedSubgraph
+  apply this.le_of_le_subset (walkable_isCompOf hxG |>.le.trans hle)
+  intro v hv
+  exact ConnBetween.mono hv hle
+
+lemma IsCompOf.of_vertexDelete (hH : H.IsCompOf G) (hS : Disjoint V(H) S) : H.IsCompOf (G - S) := by
+  refine ⟨⟨hH.isClosedSubgraph.vertexDelete_of_disjoint hS, hH.1.2⟩, ?_⟩
+  rintro K ⟨hKcS, ⟨v, hvK⟩⟩ hKH
+  obtain rfl := hH.eq_walkable_of_mem_walkable (vertexSet_mono hKH hvK)
+  have hKG := hKcS.isInducedSubgraph.trans <| G.vertexDelete_isInducedSubgraph _
+  apply hKG.le_of_le_subset hH.le
+  rintro u ⟨w, hw, rfl, rfl⟩
+  have hwW : (G.walkable w.first).IsWalk w :=
+    hw.isWalk_isClosedSubgraph_of_first_mem G.walkable_isClosedSubgraph (by simp [hw.first_mem])
+  have hwS : (G - S).IsWalk w := by
+    simp only [isWalk_vertexDelete_iff, hw, true_and]
+    exact hS.mono_left hwW.vertexSet_subset
+  exact hwS.isWalk_isClosedSubgraph_of_first_mem hKcS hvK |>.last_mem
 
 lemma singleVertex_connected (hG : V(G) = {x}) : G.Connected := by
   simp [connected_iff, hG, preconnected_of_vertexSet_subsingleton]
@@ -198,8 +209,8 @@ lemma exists_of_not_connected (h : ¬ G.Connected) (hne : V(G).Nonempty) :
   simp only [connected_iff, hne, Preconnected, true_and, not_forall, exists_prop,
     exists_and_left] at h
   obtain ⟨x, hx, y, hy, hxy⟩ := h
-  refine ⟨{z | G.ConnectedBetween x z}, ?_, ⟨x, by simpa⟩,
-    fun u v (h : G.ConnectedBetween x u) huv ↦ h.trans huv.connectedBetween⟩
+  refine ⟨{z | G.ConnBetween x z}, ?_, ⟨x, by simpa⟩,
+    fun u v (h : G.ConnBetween x u) huv ↦ h.trans huv.connBetween⟩
   exact HasSubset.Subset.ssubset_of_mem_notMem (fun z hz ↦ hz.right_mem) hy (by simpa)
 
 lemma connected_iff_forall_exists_adj (hne : V(G).Nonempty) :
@@ -218,16 +229,16 @@ lemma connected_iff_forall_exists_adj (hne : V(G).Nonempty) :
 /-- A `WList` that is `WellFormed` produces a connected graph. -/
 lemma _root_.WList.WellFormed.toGraph_connected (hW : W.WellFormed) : W.toGraph.Connected := by
   rw [connected_iff, Preconnected]
-  exact ⟨by simp, fun x y hx hy ↦ hW.isWalk_toGraph.connectedBetween_of_mem_of_mem
+  exact ⟨by simp, fun x y hx hy ↦ hW.isWalk_toGraph.connBetween_of_mem_of_mem
     (by simpa using hx) (by simpa using hy)⟩
 
 lemma IsWalk.toGraph_connected (hW : G.IsWalk W) : W.toGraph.Connected :=
   hW.wellFormed.toGraph_connected
 
-lemma Connected.exists_connectedBetween_deleteEdge_set {X : Set α} (hG : G.Connected)
-    (hX : (X ∩ V(G)).Nonempty) (hu : u ∈ V(G)) : ∃ x ∈ X, (G ＼ E(G[X])).ConnectedBetween u x := by
+lemma Preconnected.exists_connBetween_deleteEdge_set {X : Set α} (hG : G.Preconnected)
+    (hX : (X ∩ V(G)).Nonempty) (hu : u ∈ V(G)) : ∃ x ∈ X, (G ＼ E(G[X])).ConnBetween u x := by
   obtain ⟨x', hx'X, hx'V⟩ := hX
-  obtain ⟨W, hW, hu, rfl⟩ := (hG.connectedBetween hu hx'V)
+  obtain ⟨W, hW, hu, rfl⟩ := (hG _ _ hu hx'V)
   induction hW generalizing u with
   | nil => exact ⟨_, hx'X, by simp_all⟩
   | @cons x e W hW h ih =>
@@ -235,16 +246,16 @@ lemma Connected.exists_connectedBetween_deleteEdge_set {X : Set α} (hG : G.Conn
     by_cases hmem : e ∈ E(G ＼ E(G[X]))
     · obtain ⟨x', hx', hWx'⟩ := ih (u := W.first) (hW.vertex_mem_of_mem (by simp)) rfl
         (by simpa using hx'X) (by simpa using hx'V)
-      have hconn := (h.of_le_of_mem edgeDelete_le hmem).connectedBetween
+      have hconn := (h.of_le_of_mem edgeDelete_le hmem).connBetween
       exact ⟨x', hx', hconn.trans hWx'⟩
     rw [edgeDelete_edgeSet, mem_diff, and_iff_right h.edge_mem, h.mem_induce_iff, not_not] at hmem
     exact ⟨x, hmem.1, by simpa⟩
 
-lemma Connected.exists_isPathFrom (hG : G.Connected) (hS : (S ∩ V(G)).Nonempty)
+lemma Preconnected.exists_isPathFrom (hG : G.Preconnected) (hS : (S ∩ V(G)).Nonempty)
     (hT : (T ∩ V(G)).Nonempty) : ∃ P, G.IsPathFrom S T P := by
   obtain ⟨x, hxS, hx⟩ := hS
   obtain ⟨y, hyT, hy⟩ := hT
-  obtain ⟨W, hW, rfl, rfl⟩ := (hG.connectedBetween hx hy)
+  obtain ⟨W, hW, rfl, rfl⟩ := (hG _ _ hx hy)
   clear hx hy
   induction hW generalizing S with
   | @nil x hx => exact ⟨nil x, by simp_all⟩
@@ -259,48 +270,280 @@ lemma Connected.exists_isPathFrom (hG : G.Connected) (hS : (S ∩ V(G)).Nonempty
     · exact ⟨nil x, by simp [hxS, hxT, h.left_mem]⟩
     use cons x e P₀
     simp only [isPathFrom_iff, cons_isPath_iff, first_cons, last_cons]
-    refine ⟨⟨hP₀.isPath, by rwa [h_eq], fun hxP₀ ↦ hPS ?_⟩, hxS, hP₀.last_mem, ?_, ?_⟩
+    refine ⟨⟨by rwa [h_eq], hP₀.isPath, fun hxP₀ ↦ hPS ?_⟩, hxS, hP₀.last_mem, ?_, ?_⟩
     · rwa [← h_eq, ← hP₀.eq_first_of_mem hxP₀ (by simp [hxS])]
     · simp only [mem_cons_iff, forall_eq_or_imp, implies_true, true_and]
       exact fun a haP haS ↦ hPS.elim <| by rwa [← h_eq, ← hP₀.eq_first_of_mem haP (by simp [haS])]
     simp only [mem_cons_iff, forall_eq_or_imp, hxT, IsEmpty.forall_iff, true_and]
     exact fun a haP₀ haT ↦ hP₀.eq_last_of_mem haP₀ haT
 
-lemma Connected.exists_connectedBetween_deleteEdge_set_set (hG : G.Connected)
+lemma Preconnected.exists_connBetween_deleteEdge_set_set (hG : G.Preconnected)
     (hS : (S ∩ V(G)).Nonempty) (hT : (T ∩ V(G)).Nonempty) :
-    ∃ x ∈ S, ∃ y ∈ T, (G ＼ (E(G[S]) ∪ E(G[T]))).ConnectedBetween x y := by
+    ∃ x ∈ S, ∃ y ∈ T, (G ＼ (E(G[S]) ∪ E(G[T]))).ConnBetween x y := by
   obtain ⟨P, hP⟩ := hG.exists_isPathFrom hS hT
   have h0 : P.first ∈ V(G ＼ (E(G[S]) ∪ E(G[T]))) := by
     simpa using hP.isWalk.vertex_mem_of_mem (by simp)
   refine ⟨_, hP.first_mem, _, hP.last_mem,
-    (hP.isPathFrom_le (by simp) (fun e heP ↦ ?_) h0).isWalk.connectedBetween_first_last⟩
+    (hP.isPathFrom_le (by simp) (fun e heP ↦ ?_) h0).isWalk.connBetween_first_last⟩
   obtain ⟨x, y, hxy⟩ := exists_dInc_of_mem_edge heP
   have hxy' := hP.isWalk.isLink_of_dInc hxy
   rw [edgeDelete_edgeSet, mem_diff, mem_union, hxy'.mem_induce_iff,
     hxy'.mem_induce_iff, and_iff_right hxy'.edge_mem]
   simp [hP.notMem_left_of_dInc hxy, hP.notMem_right_of_dInc hxy]
 
-lemma Connected.exists_isLink_of_mem (hG : G.Connected) (hV : V(G).Nontrivial) (hx : x ∈ V(G)) :
+lemma loopRemove_preconnected_iff (G : Graph α β) :
+    (G.loopRemove).Preconnected ↔ G.Preconnected := by
+  refine ⟨fun h s t hs ht ↦ h s t hs ht |>.mono G.loopRemove_le, fun h s t hs ht ↦ ?_⟩
+  obtain ⟨P, hP, rfl, rfl⟩ := h s t hs ht |>.exists_isPath
+  use P, hP.loopRemove.isWalk
+
+lemma loopRemove_connected_iff (G : Graph α β) : (G.loopRemove).Connected ↔ G.Connected := by
+  rw [connected_iff, connected_iff, loopRemove_preconnected_iff]
+  simp
+
+lemma edgeDelete_connected_iff_of_forall_isLoopAt (hF : ∀ e ∈ F, ∃ x, G.IsLoopAt e x) :
+    (G ＼ F).Connected ↔ G.Connected := by
+  refine ⟨fun h ↦ h.of_isSpanningSubgraph <| G.edgeDelete_isSpanningSubgraph, fun h ↦ ?_⟩
+  rw [← loopRemove_connected_iff, loopRemove] at h
+  rw [edgeDelete_eq_edgeRestrict]
+  refine h.of_isSpanningSubgraph ?_
+  apply edgeRestrict_isSpanningSubgraph_edgeRestrict
+  intro e ⟨he, hel⟩
+  have := by simpa using mt (hF e)
+  use he, he, this hel
+
+lemma edgeDelete_isLoopAt_isSep_iff (C) : (G ＼ E(G, u, u)).IsSep C ↔ G.IsSep C := by
+  refine ⟨fun h ↦ ⟨h.subset_vx, fun hc ↦ ?_⟩, fun h ↦ ⟨h.subset_vx, fun hc ↦ ?_⟩⟩
+  swap
+  · rw [edgeDelete_vertexDelete] at hc
+    exact h.not_connected <| hc.of_isSpanningSubgraph <| edgeDelete_isSpanningSubgraph ..
+  have := h.not_connected
+  by_cases huC : u ∈ C
+  · rw [edgeDelete_vertexDelete, edgeDelete_eq_of_disjoint] at this
+    exact this hc
+    rw [vertexDelete_edgeSet_diff]
+    exact disjoint_sdiff_left.mono_right
+    <| G.linkEdges_subset_incEdges_left u u |>.trans <| G.incEdge_subset_setIncEdges huC
+  rw [edgeDelete_vertexDelete, edgeDelete_connected_iff_of_forall_isLoopAt] at this
+  exact this hc
+  intro e he
+  use u, by simpa
+  simp [he.left_mem, huC]
+
+lemma Preconnected.edgeDelete_linkEdges_connBetween_or (hG : G.Preconnected) (hx : x ∈ V(G))
+    (hu : u ∈ V(G)) (hv : v ∈ V(G)) :
+    (G ＼ E(G, u, v)).ConnBetween x u ∨ (G ＼ E(G, u, v)).ConnBetween x v := by
+  obtain ⟨w, (rfl | rfl), hw⟩ := hG.exists_connBetween_deleteEdge_set (X := {u, v})
+    ⟨u, by simp, hu⟩ hx
+  <;> replace hw := hw.mono <| G.edgeDelete_anti_right <| G.induce_pair_edgeSet _ _ <;> tauto
+
+lemma Preconnected.edgeDelete_linkEdges_not_connBetween (hG : G.Preconnected)
+    (h' : ¬ (G ＼ E(G, u, v)).Preconnected) : ¬ (G ＼ E(G, u, v)).ConnBetween u v := by
+  contrapose! h'
+  apply preconnected_of_exists_connBetween
+  use u
+  intro x hx
+  simp only [edgeDelete_vertexSet] at hx
+  obtain hw | hw := hG.edgeDelete_linkEdges_connBetween_or hx h'.left_mem h'.right_mem
+  · exact hw.symm
+  exact .trans h' hw.symm
+
+lemma Preconnected.edgeDelete_linkEdges_components (hG : G.Preconnected) (hu : u ∈ V(G))
+    (hv : v ∈ V(G)) :
+    (G ＼ E(G, u, v)).Components = {(G ＼ E(G, u, v)).walkable u, (G ＼ E(G, u, v)).walkable v} := by
+  rw [components_eq_walkable_image]
+  ext H
+  simp only [edgeDelete_vertexSet, mem_image, mem_insert_iff, mem_singleton_iff]
+  constructor
+  · rintro ⟨x, hx, rfl⟩
+    apply (hG.edgeDelete_linkEdges_connBetween_or hx hu hv).imp <;> intro h <;> grw [h]
+  · rintro (rfl | rfl)
+    · use u
+    · use v
+
+lemma Preconnected.walkable_singleton_left_of_vertexDelete_connected (hG : G.Preconnected)
+    (h : ¬ (G ＼ E(G, u, v)).Connected) (huconn : (G - u).Connected) :
+    V((G ＼ E(G, u, v)).walkable u) = {u} := by
+  rw [connected_iff, not_and_or, edgeDelete_vertexSet, vertexSet_not_nonempty_iff] at h
+  obtain rfl | h := h
+  · simp at huconn
+  have hu : u ∈ V(G) := by
+    by_contra! hu
+    simp [hu, hG] at h
+  have hv : v ∈ V(G) := by
+    by_contra! hv
+    simp [hv, hG] at h
+  have hne : u ≠ v := by
+    by_contra huv
+    rw [← loopRemove_preconnected_iff] at hG
+    subst v
+    simp only [linkEdges_self] at h
+    exact h <| hG.isSpanningSubgraph <| G.loopRemove_isSpanningSubgraph_edgeDelete_isLoopAt u
+  refine subset_antisymm ?_ (by simpa)
+  have := (G ＼ E(G, u, v)).walkable_isClosedSubgraph (u := u) |>.vertexDelete {u}
+  rw [edgeDelete_vertexDelete, ← vertexDelete_singleton, ← vertexDelete_singleton,
+    (G - u).edgeDelete_eq ?_] at this
+  have := mt (huconn.eq_of_isClosedSubgraph this) ?_
+  simpa [vertexDelete_vertexSet, not_nonempty_iff_eq_empty, diff_eq_empty] using this
+  · apply_fun vertexSet
+    intro heq
+    have : v ∈ V(G - u) := by simp [hne.symm, hv]
+    rw [← heq] at this
+    simp only [vertexDelete_singleton, vertexDelete_vertexSet, mem_diff,
+      ← connBetween_iff_mem_walkable_of_mem, mem_singleton_iff, hne.symm, not_false_eq_true,
+      and_true] at this
+    exact hG.edgeDelete_linkEdges_not_connBetween h this
+  · rw [disjoint_iff_forall_notMem, vertexDelete_singleton, vertexDelete_edgeSet_diff,
+      setIncEdges_singleton]
+    intro e ⟨he, heu⟩
+    contrapose! heu
+    exact G.linkEdges_subset_incEdges_left u v heu
+
+lemma Preconnected.walkable_singleton_right_of_vertexDelete_connected (hG : G.Preconnected)
+    (h : ¬ (G ＼ E(G, u, v)).Connected) (hvconn : (G - v).Connected) :
+    V((G ＼ E(G, u, v)).walkable v) = {v} := by
+  rw [linkEdges_comm] at h ⊢
+  exact hG.walkable_singleton_left_of_vertexDelete_connected h hvconn
+
+lemma not_connected_or_singleton_isSep_or_pair (h : ¬ (G ＼ E(G, u, v)).Connected) :
+    ¬ G.Connected ∨ G.IsSep {u} ∨ G.IsSep {v} ∨ V(G) = {u, v} := by
+  simp only [or_iff_not_imp_left, not_not]
+  intro hG husep hvsep
+  have hu : u ∈ V(G) := by
+    by_contra! hu
+    simp [hu, hG] at h
+  have hv : v ∈ V(G) := by
+    by_contra! hv
+    simp [hv, hG] at h
+  simp only [isSep_iff, singleton_subset_iff, hu, hv, true_and, not_not] at husep hvsep
+  have hcomp := (G ＼ E(G, u, v)).eq_sUnion_components
+  apply_fun vertexSet at hcomp
+  simp only [edgeDelete_vertexSet, (hG.pre.edgeDelete_linkEdges_components hu hv), sUnion_vertexSet,
+    mem_insert_iff, mem_singleton_iff, iUnion_iUnion_eq_or_left, iUnion_iUnion_eq_left] at hcomp
+  rw [hcomp, hG.pre.walkable_singleton_left_of_vertexDelete_connected h husep,
+    hG.pre.walkable_singleton_right_of_vertexDelete_connected h hvsep, pair_comm]
+  simp
+
+lemma not_preconnected_or_singleton_isSep_or_pair (h : ¬ (G ＼ E(G, u, v)).Preconnected) :
+    ¬ G.Preconnected ∨ G.IsSep {u} ∨ G.IsSep {v} ∨ V(G) = {u, v} := by
+  refine not_connected_or_singleton_isSep_or_pair (mt Connected.pre h) |>.imp (mt ?_) id
+  simp_all only [preconnected_iff, ← vertexSet_not_nonempty_iff, edgeDelete_vertexSet, not_or,
+    not_not, not_true_eq_false, false_or, implies_true]
+
+lemma IsSep.of_edgeDelete_linkEdges (h : (G ＼ E(G, u, v)).IsSep S) :
+    G.IsSep S ∨ G.IsSep (insert u S) ∨ G.IsSep (insert v S) ∨ V(G) = {u, v} ∪ S := by
+  obtain huS | huS := em (u ∈ S)
+  · refine Or.inl ⟨by simpa using h.subset_vx, ?_⟩
+    have := h.not_connected
+    rwa [edgeDelete_vertexDelete, edgeDelete_eq_of_disjoint] at this
+    apply Disjoint.mono_right <| (G.linkEdges_subset_incEdges_left u v).trans
+    <| G.incEdge_subset_setIncEdges huS
+    rw [vertexDelete_edgeSet_diff]
+    exact disjoint_sdiff_left
+  obtain hvS | hvS := em (v ∈ S)
+  · refine Or.inl ⟨by simpa using h.subset_vx, ?_⟩
+    have := h.not_connected
+    rwa [edgeDelete_vertexDelete, edgeDelete_eq_of_disjoint] at this
+    apply Disjoint.mono_right <| (G.linkEdges_subset_incEdges_right u v).trans
+    <| G.incEdge_subset_setIncEdges hvS
+    rw [vertexDelete_edgeSet_diff]
+    exact disjoint_sdiff_left
+
+  have : ¬((G - S) ＼ E(G - S, u, v)).Connected := by
+    have := h.not_connected
+    rw [edgeDelete_vertexDelete] at this
+    exact mt (Connected.of_isSpanningSubgraph ·
+    <| (G - S).edgeDelete_isSpanningSubgraph_anti_right <| by simp [huS, hvS]) this
+  obtain hnconn | hsepu | hsepv | hpair := (G - S).not_connected_or_singleton_isSep_or_pair
+    this
+  · exact Or.inl ⟨by simpa using h.subset_vx, hnconn⟩
+  · refine Or.inr (Or.inl ⟨?_, ?_⟩)
+    · have := by simpa using hsepu.subset_vx
+      simpa [insert_subset_iff, this] using h.subset_vx
+    · rw [← union_singleton, ← vertexDelete_vertexDelete]
+      exact hsepu.not_connected
+  · refine Or.inr (Or.inr (Or.inl ⟨?_, ?_⟩))
+    · have := by simpa using hsepv.subset_vx
+      simpa [insert_subset_iff, this] using h.subset_vx
+    · rw [← union_singleton, ← vertexDelete_vertexDelete]
+      exact hsepv.not_connected
+  · refine Or.inr (Or.inr (Or.inr ?_))
+    simp only [vertexDelete_vertexSet] at hpair
+    rw [← hpair, diff_union_self, eq_comm, union_eq_left]
+    simpa using h.subset_vx
+
+lemma ConnGE.edgeDelete_linkEdges (h : G.ConnGE (n + 1)) (u v : α) :
+    (G ＼ E(G, u, v)).ConnGE n where
+  le_cut C hC := by
+    by_contra! hcd
+    obtain h1 | h2 | h3 | h4 := hC.of_edgeDelete_linkEdges
+    · have := hcd.trans_le' (h.le_cut h1)
+      norm_cast at this
+      simp at this
+    · simpa [hcd.not_ge] using h.le_cut h2 |>.trans <| encard_insert_le ..
+    · simpa [hcd.not_ge] using h.le_cut h3 |>.trans <| encard_insert_le ..
+    obtain h | hss := h.le_card.symm
+    · grw [h4, insert_union, singleton_union, encard_insert_le, encard_insert_le] at h
+      enat_to_nat!
+      omega
+    obtain hne | rfl := eq_or_ne u v |>.symm
+    · apply hss.not_nontrivial
+      use u, (by simp [h4]), v, (by simp [h4])
+    rw [edgeDelete_isLoopAt_isSep_iff] at hC
+    have := h.le_cut ⟨hC.subset_vx, hC.not_connected⟩
+    enat_to_nat!
+    omega
+  le_card := by
+    simp only [edgeDelete_vertexSet]
+    refine h.le_card.imp id (fun h ↦ ?_)
+    enat_to_nat!
+    omega
+
+lemma Preconnected.exists_isLink_of_mem (h : G.Preconnected) (hV : V(G).Nontrivial) (hx : x ∈ V(G)):
     ∃ e y, G.IsLink e x y ∧ y ≠ x := by
   obtain ⟨z, hz, hne⟩ := hV.exists_ne x
-  obtain ⟨P, hP, rfl, rfl⟩ := (hG.connectedBetween hx hz).exists_isPath
+  obtain ⟨P, hP, rfl, rfl⟩ := (h _ _ hx hz).exists_isPath
   rw [ne_comm, first_ne_last_iff hP.nodup] at hne
   obtain ⟨x, e, P⟩ := hne
   simp only [cons_isPath_iff] at hP
-  exact ⟨e, P.first, hP.2.1, mt (by simp +contextual [eq_comm]) hP.2.2⟩
+  exact ⟨e, P.first, hP.1, mt (by simp +contextual [eq_comm]) hP.2.2⟩
+
+lemma Connected.exists_isLink_of_mem (hG : G.Connected) (hV : V(G).Nontrivial) (hx : x ∈ V(G)) :
+    ∃ e y, G.IsLink e x y ∧ y ≠ x := hG.pre.exists_isLink_of_mem hV hx
+
+lemma Isolated.not_preconnected (hx : G.Isolated x) (hnt : V(G).Nontrivial) : ¬ G.Preconnected :=
+  fun h ↦ by simpa [hx.not_isLink] using h.exists_isLink_of_mem hnt hx.mem
 
 lemma Isolated.not_connected (hx : G.Isolated x) (hnt : V(G).Nontrivial) : ¬ G.Connected :=
   fun h ↦ by simpa [hx.not_isLink] using h.exists_isLink_of_mem hnt hx.mem
 
-lemma Connected.degreePos (h : G.Connected) (hnt : V(G).Nontrivial) : G.DegreePos := by
+lemma Preconnected.degreePos (h : G.Preconnected) (hnt : V(G).Nontrivial) : G.DegreePos := by
   intro x hx
   obtain ⟨e, y, h, -⟩ := h.exists_isLink_of_mem hnt hx
   exact ⟨e, h.inc_left⟩
+
+lemma Connected.degreePos (h : G.Connected) (hnt : V(G).Nontrivial) : G.DegreePos :=
+  h.pre.degreePos hnt
 
 lemma Connected.edgeSet_nonempty (h : G.Connected) (hnt : V(G).Nontrivial) : E(G).Nonempty := by
   obtain ⟨x, hx⟩ := hnt.nonempty
   obtain ⟨e, y, he, -⟩ := h.exists_isLink_of_mem hnt hx
   exact ⟨e, he.edge_mem⟩
+
+lemma Preconnected.finite [G.EdgeFinite] (h : G.Preconnected) : G.Finite where
+  vertexSet_finite := by
+    obtain hss | hnt := V(G).subsingleton_or_nontrivial
+    · exact hss.finite
+    have : V(G, E(G)) = V(G) := by
+      ext x
+      refine ⟨fun ⟨e, he, hex⟩ ↦ hex.vertex_mem, fun hx ↦ ?_⟩
+      obtain ⟨e, y, h, -⟩ := h.exists_isLink_of_mem hnt hx
+      exact ⟨e, h.edge_mem, h.inc_left⟩
+    rw [← this, ← encard_lt_top_iff]
+    exact lt_of_le_of_lt (endSetSet_encard_le G E(G))
+    <| WithTop.mul_lt_top (compareOfLessAndEq_eq_lt.mp rfl) (encard_lt_top_iff.mpr G.edgeSet_finite)
+
+lemma Connected.finite [G.EdgeFinite] (h : G.Connected) : G.Finite := h.pre.finite
 
 /-- If `G` is connected but its restriction to some set `F` of edges is not,
 then there is an edge of `G` joining two vertices that are not connected in the restriction. -/
@@ -312,7 +555,7 @@ lemma Connected.exists_of_edgeRestrict_not_connected (hG : G.Connected)
   obtain ⟨x₀, hx₀⟩ := S.nonempty_left
   obtain ⟨y₀, hy₀⟩ := S.nonempty_right
   obtain ⟨W, hW, rfl, rfl⟩ :=
-    (hG.connectedBetween (S.left_subset hx₀) (S.right_subset hy₀))
+    (hG.connBetween (S.left_subset hx₀) (S.right_subset hy₀))
   rw [← S.not_left_mem_iff (S.right_subset hy₀)] at hy₀
   obtain ⟨e, x, y, hexy, hx, hy⟩ := W.exists_dInc_prop_not_prop hx₀ hy₀
   have h' := hW.isLink_of_dInc hexy
@@ -320,22 +563,76 @@ lemma Connected.exists_of_edgeRestrict_not_connected (hG : G.Connected)
   refine ⟨S, e, x, y, fun heF ↦ ?_, hx, hy, h'⟩
   exact S.not_adj hx hy <| IsLink.adj <| h'.of_le_of_mem (by simp) <| by simpa [h'.edge_mem]
 
+lemma IsSep.exists_adj_of_isCompOf_vertexDelete (hM : IsSep G S) (hG : G.Connected)
+    (hH : H.IsCompOf (G - S)) : ∃ x ∈ S, ∃ y ∈ V(H), G.Adj x y := by
+  by_contra! hno
+  have hHcl' : H ≤c G - S := hH.1.1
+  have hHcl : H ≤c G := by
+    refine ⟨hHcl'.le.trans vertexDelete_le, fun e x ⟨y, hxy⟩ hxH ↦ hHcl'.closed ?_ hxH⟩
+    refine ((G.vertexDelete_isLink_iff S).2 ⟨hxy, ?_, ?_⟩).inc_left
+    · simpa using (vertexSet_mono hHcl'.le hxH).2
+    exact (hno y · x hxH <| by simpa [adj_comm] using hxy.adj)
+  obtain rfl : H = G := hG.eq_of_isClosedSubgraph hHcl hH.1.2
+  obtain ⟨x, hxS⟩ := hM.nonempty_of_connected hG
+  have := by simpa [disjoint_iff_forall_notMem] using hHcl'.le
+  exact this (hM.subset_vx hxS) hxS
+
+/-- Every vertex in a mininum cardinality separator has an edge to components of the vertex-deleted
+graph. This lemma requires the separator to be finite because `IsMinSep` uses `encard` for
+cardinality comparison and cannot tell the size difference of infinite sets. -/
+lemma IsMinSep.exists_adj_of_isCompOf_vertexDelete (hM : IsMinSep G S) (hH : H.IsCompOf (G - S))
+    (hx : x ∈ S) (hfin : S.Finite) : ∃ y ∈ V(H), G.Adj x y := by
+  by_contra! hno
+  have hHcl : H ≤c G - S := hH.1.1
+  refine hM.not_isSep_of_encard_lt (hfin.diff.encard_lt_encard (by simpa : S \ {x} ⊂ _)) ?_
+  refine ⟨diff_subset.trans hM.subset_vx, fun hcon ↦ ?_⟩
+  have hHclS' : H ≤c (G - (S \ {x})) := by
+    refine ⟨hHcl.le.trans (by grw [diff_subset]), fun e u ⟨v, huv⟩ huH ↦ hHcl.closed ⟨v, ?_⟩ huH⟩
+    simp only [vertexDelete_isLink_iff, huv.of_le vertexDelete_le, vertexSet_mono hHcl.le huH |>.2,
+      not_false_eq_true, true_and]
+    obtain rfl | hvne := eq_or_ne v x
+    · exact hno u huH (huv.symm.of_le vertexDelete_le).adj |>.elim
+    simpa [hvne] using huv.right_mem.2
+  obtain rfl : H = G - (S \ {x}) := hcon.eq_of_isClosedSubgraph hHclS' hH.1.2
+  have hxnotH : x ∉ V(G - (S \ {x})) := (vertexSet_mono hHcl.le · |>.2 hx)
+  exact hxnotH <| by simp [hM.toIsSep.subset_vx hx]
+
+lemma ConnGE.connected {n : ℕ} (hG : G.ConnGE n) (hn : 1 ≤ n) : G.Connected := by
+  have h1 : G.ConnGE 1 := hG.anti_right hn
+  simpa [connGE_one_iff] using h1
+
+lemma Preconnected.exists_isNonloopAt_of_nontrivial (hG : G.Preconnected)
+    (hnt : V(G).Nontrivial) : ∃ e x, G.IsNonloopAt e x := by
+  obtain ⟨x, hx⟩ := hnt.nonempty
+  obtain ⟨e, y, hxy, hne⟩ := hG.exists_isLink_of_mem hnt hx
+  exact ⟨e, x, ⟨y, hne, hxy⟩⟩
+
+lemma ConnGE.exists_isNonloopAt {k : ℕ} (hG : G.ConnGE k) (hk : 2 ≤ k) :
+    ∃ e x, G.IsNonloopAt e x := by
+  have hconn : G.Connected := hG.connected (show 1 ≤ k from (by decide : 1 ≤ 2).trans hk)
+  have hle : (k : ℕ∞) ≤ V(G).encard := by simpa using hG.le_cut vertexSet_isSep
+  have hnt : V(G).Nontrivial := by
+    exact two_le_encard_iff_nontrivial.mp <| (by norm_cast : (2 : ℕ∞) ≤ k).trans hle
+  obtain ⟨x, hx⟩ := hconn.nonempty
+  obtain ⟨e, y, hxy, hne⟩ := hconn.exists_isLink_of_mem hnt hx
+  exact ⟨e, x, ⟨y, hne, hxy⟩⟩
+
 /- ### Unions -/
 
 lemma Compatible.union_connected_of_forall (h : G.Compatible H) (hG : G.Connected)
-    (hH : ∀ x ∈ V(H), ∃ y ∈ V(G), H.ConnectedBetween x y) : (G ∪ H).Connected := by
+    (hH : ∀ x ∈ V(H), ∃ y ∈ V(G), H.ConnBetween x y) : (G ∪ H).Connected := by
   obtain ⟨v, hv⟩ := hG.nonempty
   refine connected_of_vertex (u := v) (by simp [hv]) ?_
   rintro y (hy | hy)
-  · exact (hG.connectedBetween hy hv).of_le <| Graph.left_le_union ..
+  · exact (hG.connBetween hy hv).mono <| Graph.left_le_union ..
   obtain ⟨z, hzG, hyz⟩ := hH _ hy
-  exact (hyz.of_le h.right_le_union).trans <| (hG.connectedBetween hzG hv).of_le <|
+  exact (hyz.mono h.right_le_union).trans <| (hG.connBetween hzG hv).mono <|
     Graph.left_le_union ..
 
 lemma Compatible.union_connected_of_nonempty_inter (h : Compatible G H) (hG : G.Connected)
     (hH : H.Connected) (hne : (V(G) ∩ V(H)).Nonempty) : (G ∪ H).Connected :=
   let ⟨z, hzG, hzH⟩ := hne
-  h.union_connected_of_forall hG fun _ hx ↦ ⟨z, hzG, hH.connectedBetween hx hzH⟩
+  h.union_connected_of_forall hG fun _ hx ↦ ⟨z, hzG, hH.connBetween hx hzH⟩
 
 lemma IsWalk.exists_mem_mem_of_union (h : (G ∪ H).IsWalk W) (hxW : x ∈ V(W)) (hyW : y ∈ V(W))
     (hxG : x ∈ V(G)) (hyH : y ∈ V(H)) : ∃ x ∈ W, x ∈ V(G) ∧ x ∈ V(H) := by
@@ -351,95 +648,89 @@ lemma union_not_connected_of_disjoint_vertexSet (hV : Disjoint V(G) V(H)) (hG : 
   obtain ⟨x, hx⟩ := hG
   obtain ⟨y, hy⟩ := hH
   intro h
-  obtain ⟨W, hW, rfl, rfl⟩ := (h.connectedBetween (x := x) (y := y) (by simp [hx]) (by simp [hy]))
+  obtain ⟨W, hW, rfl, rfl⟩ := (h.connBetween (x := x) (y := y) (by simp [hx]) (by simp [hy]))
   obtain ⟨u, -, huG, huH⟩ := hW.exists_mem_mem_of_union first_mem last_mem hx hy
   exact hV.notMem_of_mem_left huG huH
+
+lemma IsPath.isPath_of_union_of_subsingleton_inter (hP : (G ∪ H).IsPath P)
+    (hi : (V(G) ∩ V(H)).Subsingleton) (hf : P.first ∈ V(G)) (hl : P.last ∈ V(G)) :
+    G.IsPath P := by
+  wlog hc : Compatible G H generalizing H with aux
+  · exact aux (union_eq_union_edgeDelete .. ▸ hP) (hi.anti (by simp))
+      (Compatible.of_disjoint_edgeSet disjoint_sdiff_right)
+  induction P with
+  | nil u => simpa [hf]
+  | cons u e w ih =>
+    obtain ⟨heuwf, hw, huw⟩ := cons_isPath_iff.mp hP
+    obtain heG | heH := by simpa using heuwf.edge_mem
+    · replace heuwf : G.IsLink e u w.first := heuwf.of_le_of_mem (Graph.left_le_union ..) heG
+      simp [ih heuwf.right_mem hl hw, heuwf, huw]
+    replace heH : H.IsLink e u w.first := heuwf.of_le_of_mem (hc.right_le_union ..) heH
+    rw [hc.union_comm] at hw
+    obtain ⟨z, hz, hzH, hzG⟩ := hw.isWalk.exists_mem_mem_of_union first_mem last_mem heH.right_mem
+      hl
+    obtain rfl := hi ⟨hf, heH.left_mem⟩ ⟨hzG, hzH⟩
+    exact huw hz |>.elim
 
 /-! ### Cycles -/
 
 /-- Two vertices of a cycle are connected after deleting any other vertex.  -/
-lemma IsCycle.connectedBetween_deleteVertex_of_mem_of_mem (hC : G.IsCycle C) (x : α) (hy₁ : y₁ ∈ C)
-    (hy₂ : y₂ ∈ C) (hne₁ : y₁ ≠ x) (hne₂ : y₂ ≠ x) :
-    (G - ({x} : Set α)).ConnectedBetween y₁ y₂ := by
+lemma IsCyclicWalk.connBetween_deleteVertex_of_mem_of_mem (hC : G.IsCyclicWalk C) (x : α)
+    (hy₁ : y₁ ∈ C) (hy₂ : y₂ ∈ C) (hne₁ : y₁ ≠ x) (hne₂ : y₂ ≠ x) :
+    (G - ({x} : Set α)).ConnBetween y₁ y₂ := by
   obtain rfl | hne := eq_or_ne y₁ y₂
   · simpa [hC.vertexSet_subset hy₁]
   obtain ⟨u, e, rfl⟩ | hnt := hC.loop_or_nontrivial
   · simp_all
   by_cases hxC : x ∈ C
   · obtain ⟨P, hP, hP_eq⟩ := hC.exists_isPath_toGraph_eq_delete_vertex hnt hxC
-    refine IsWalk.connectedBetween_of_mem_of_mem (W := P) ?_ ?_ ?_
+    refine IsWalk.connBetween_of_mem_of_mem (W := P) ?_ ?_ ?_
     · simp [hP.isWalk, ← toGraph_vertexSet, hP_eq]
     all_goals simp_all [← mem_vertexSet_iff, ← toGraph_vertexSet]
-  exact IsWalk.connectedBetween_of_mem_of_mem (W := C) (by simp [hxC, hC.isWalk]) hy₁ hy₂
+  exact IsWalk.connBetween_of_mem_of_mem (W := C) (by simp [hxC, hC.isWalk]) hy₁ hy₂
 
 /-- Two vertices of a cycle are connected after deleting any edge. -/
-lemma IsCycle.connectedBetween_deleteEdge_of_mem_of_mem (hC : G.IsCycle C) (e : β)
-    (hx₁ : x₁ ∈ C) (hx₂ : x₂ ∈ C) : (G ＼ {e}).ConnectedBetween x₁ x₂ := by
+lemma IsCyclicWalk.connBetween_deleteEdge_of_mem_of_mem (hC : G.IsCyclicWalk C) (e : β)
+    (hx₁ : x₁ ∈ C) (hx₂ : x₂ ∈ C) : (G ＼ {e}).ConnBetween x₁ x₂ := by
   obtain heC | heC := em' <| e ∈ C.edge
-  · exact IsWalk.connectedBetween_of_mem_of_mem (by simp [hC.isWalk, heC]) hx₁ hx₂
+  · exact IsWalk.connBetween_of_mem_of_mem (by simp [hC.isWalk, heC]) hx₁ hx₂
   obtain ⟨P, hP, hP_eq⟩ := hC.exists_isPath_toGraph_eq_delete_edge heC
-  apply IsWalk.connectedBetween_of_mem_of_mem (W := P)
+  apply IsWalk.connBetween_of_mem_of_mem (W := P)
     (by simp [hP.isWalk, ← toGraph_edgeSet, hP_eq])
   all_goals rwa [← mem_vertexSet_iff, ← toGraph_vertexSet, hP_eq, edgeDelete_vertexSet,
     toGraph_vertexSet, mem_vertexSet_iff]
 
 /-- If two graphs intersect in at most one vertex,
 then any cycle of their union is a cycle of one of the graphs. -/
-lemma IsCycle.isCycle_or_isCycle_of_union_of_subsingleton_inter (hC : (G ∪ H).IsCycle C)
-    (hi : (V(G) ∩ V(H)).Subsingleton) : G.IsCycle C ∨ H.IsCycle C := by
-  wlog hcompat : Compatible G H generalizing H with aux
+lemma IsCyclicWalk.isCyclicWalk_or_isCyclicWalk_of_union_of_subsingleton_inter
+    (hC : (G ∪ H).IsCyclicWalk C) (hi : (V(G) ∩ V(H)).Subsingleton) :
+    G.IsCyclicWalk C ∨ H.IsCyclicWalk C := by
+  wlog hc : Compatible G H generalizing H with aux
   · obtain (hG | hH) := aux (union_eq_union_edgeDelete .. ▸ hC) (hi.anti (by simp))
       (Compatible.of_disjoint_edgeSet disjoint_sdiff_right)
     · exact .inl hG
-    exact .inr <| hH.isCycle_of_ge <| by simp
-  -- If the cycle is a loop, this is easy.
-  obtain ⟨x, e, rfl⟩ | hnt := hC.loop_or_nontrivial
-  · obtain heG | heH := hC.isWalk.edge_mem_of_mem (e := e) (by simp)
-    · exact .inl <| hC.isCycle_of_le (Graph.left_le_union ..) (by simpa)
-    exact .inr <| hC.isCycle_of_le hcompat.right_le_union (by simpa)
-  -- Every edge of `C` has distinct ends in `G` or in `H`.
-  have aux1 (e) (he : e ∈ E(C)) :
-      ∃ x y, x ≠ y ∧ x ∈ V(C) ∧ y ∈ V(C) ∧ (G.IsLink e x y ∨ H.IsLink e x y) := by
-    obtain ⟨x, y, hxy⟩ := C.exists_isLink_of_mem_edge he
-    exact ⟨x, y, hC.ne_of_isLink hnt hxy, hxy.left_mem, hxy.right_mem,
-      by simpa [hcompat.union_isLink_iff] using hC.isWalk.isLink_of_isLink hxy ⟩
-  -- If the vertices of `C` are contained in `G` or `H`, then `C` is contained in `G` or `H`.
-  by_cases hCG : V(C) ⊆ V(G)
-  · refine .inl <| hC.isCycle_of_le (Graph.left_le_union ..) fun e heC ↦ ?_
-    obtain ⟨x, y, hne, hxC, hyC, hxy | hxy⟩ := aux1 e heC
-    · exact hxy.edge_mem
-    exact False.elim <| hne <| hi ⟨hCG hxC, hxy.left_mem⟩ ⟨hCG hyC, hxy.right_mem⟩
-  by_cases hCH : V(C) ⊆ V(H)
-  · refine .inr <| hC.isCycle_of_le hcompat.right_le_union fun e heC ↦ ?_
-    obtain ⟨x, y, hne, hxC, hyC, hxy | hxy⟩ := aux1 e heC
-    · exact False.elim <| hne <| hi ⟨hxy.left_mem, hCH hxC⟩ ⟨hxy.right_mem, hCH hyC⟩
-    exact hxy.edge_mem
-  -- Take a path from a vertex `x` of `C ∩ (G \ H)` to a vertex `y` of `C ∩ (H \ G)`.
-  -- This path must intersect `V(G) ∩ V(H)` in a vertex `a`.
-  obtain ⟨x, hxC, hxH⟩ := not_subset.1 hCH
-  obtain ⟨y, hyC, hyG⟩ := not_subset.1 hCG
-  have hxG : x ∈ V(G) := by simpa [hxH] using hC.vertexSet_subset hxC
-  have hyH : y ∈ V(H) := by simpa [hyG] using hC.vertexSet_subset hyC
-  obtain ⟨W, hW, rfl, rfl⟩ := (hC.isWalk.connectedBetween_of_mem_of_mem hxC hyC)
-  obtain ⟨a, -, haG, haH⟩ := hW.exists_mem_mem_of_union first_mem last_mem hxG hyH
-  have hxa : W.first ≠ a := by rintro rfl; contradiction
-  have hya : W.last ≠ a := by rintro rfl; contradiction
-  -- Now take an `xy`-path in `C` that doesn't use `a`. This must intersect `V(G) ∩ V(H)`
-  -- in another vertex `b`, contradicting the fact that the intersection is a subsingleton.
-  obtain ⟨w', hW', h1', h2'⟩ :=
-    (hC.connectedBetween_deleteVertex_of_mem_of_mem a hxC hyC hxa hya)
-  rw [hcompat.vertexDelete_union] at hW'
-  obtain ⟨b, -, hbG, hbH⟩ :=
-    hW'.exists_mem_mem_of_union first_mem last_mem (by simp [h1', hxG, hxa])
-      (by simp [h2', hyH, hya])
-  rw [vertexDelete_vertexSet, mem_diff, mem_singleton_iff] at hbG hbH
-  refine False.elim <| hbG.2 (hi ?_ ?_) <;> simp_all
+    exact .inr <| hH.of_le <| by simp
+  obtain ⟨u, e, w⟩ := hC.nonempty
+  wlog heG : e ∈ E(G) generalizing G H with aux
+  · obtain heH := by simpa using hC.isWalk.edge_mem_of_mem (e := e) (by simp) |>.resolve_left heG
+    rw [inter_comm] at hi
+    rw [hc.union_comm] at hC
+    exact aux hi hc.symm hC heH |>.symm
+  left
+  obtain rfl := by simpa using hC.isClosed
+  have he := cons_isWalk_iff.mp hC.isWalk |>.1
+  have hw := by simpa using hC.tail_isPath
+  refine hC.isCycle_of_le (Graph.left_le_union ..) ?_
+  replace he : G.IsLink e w.last w.first := he.of_le_of_mem (Graph.left_le_union ..) heG
+  replace hw : G.IsPath w := hw.isPath_of_union_of_subsingleton_inter hi he.right_mem he.left_mem
+  simp [he.edge_mem, insert_subset_iff, hw.isWalk.edgeSet_subset]
 
-lemma Compatible.isCycle_union_iff_of_subsingleton_inter (hcompat : G.Compatible H)
-    (hi : (V(G) ∩ V(H)).Subsingleton) : (G ∪ H).IsCycle C ↔ G.IsCycle C ∨ H.IsCycle C :=
-  ⟨fun h ↦ h.isCycle_or_isCycle_of_union_of_subsingleton_inter hi,
-    fun h ↦ h.elim (fun h' ↦ h'.isCycle_of_ge (Graph.left_le_union ..))
-    (fun h' ↦ h'.isCycle_of_ge hcompat.right_le_union)⟩
+lemma Compatible.isCyclicWalk_union_iff_of_subsingleton_inter (hcompat : G.Compatible H)
+    (hi : (V(G) ∩ V(H)).Subsingleton) :
+    (G ∪ H).IsCyclicWalk C ↔ G.IsCyclicWalk C ∨ H.IsCyclicWalk C :=
+  ⟨fun h ↦ h.isCyclicWalk_or_isCyclicWalk_of_union_of_subsingleton_inter hi,
+    fun h ↦ h.elim (fun h' ↦ h'.of_le (Graph.left_le_union ..))
+    (fun h' ↦ h'.of_le hcompat.right_le_union)⟩
 
 
 /-- Every connected subgraph of `G` is a subgraph of a component of `G`. -/
@@ -447,8 +738,8 @@ lemma Connected.exists_component_ge (hH : H.Connected) (hle : H ≤ G) :
     ∃ G₁, G₁.IsCompOf G ∧ H ≤ G₁ := by
   obtain ⟨x, hx⟩ := hH.nonempty
   refine ⟨_, walkable_isCompOf (vertexSet_mono hle hx), ?_⟩
-  rw [walkable_eq_induce_setOf_connectedBetween]
-  refine le_induce_of_le_of_subset hle fun y hy ↦ (hH.connectedBetween hx hy).of_le hle
+  rw [walkable_eq_induce_setOf_connBetween]
+  refine le_induce_of_le_of_subset hle fun y hy ↦ (hH.connBetween hx hy).mono hle
 
 lemma exists_IsCompOf_edge_mem (he : e ∈ E(G)) :
     ∃ (H : Graph α β), H.IsCompOf G ∧ e ∈ E(H) := by
@@ -468,7 +759,7 @@ lemma IsCompOf_iff_isClosedSubgraph_connected : H.IsCompOf G ↔ H ≤c G ∧ H.
   obtain ⟨e, x, hex, heH, hxH⟩ := hH.exists_inc_notMem_of_lt hlt hKG
   exact heH <| ((hex.of_le hHG.le).of_isClosedSubgraph_of_mem hK hxH).edge_mem
 
-lemma IsClosedSubgraph.IsCompOf_of_connected (h : H ≤c G) (hH : H.Connected) :
+lemma IsClosedSubgraph.isCompOf_of_connected (h : H ≤c G) (hH : H.Connected) :
     H.IsCompOf G := by
   refine IsCompOf_iff_isClosedSubgraph_connected.2 ⟨h, hH⟩
 
@@ -477,7 +768,7 @@ lemma Connected.IsCompOf_of_isClosedSubgraph (hH : H.Connected) (h : H ≤c G) :
   refine IsCompOf_iff_isClosedSubgraph_connected.2 ⟨h, hH⟩
 
 /-- For a proper component `H`, the separation with parts `V(H)` and `V(G) \ V(H)`. -/
-@[simps]
+@[simps (attr := grind =)]
 def IsCompOf.separation_of_ne (h : H.IsCompOf G) (hne : H ≠ G) : G.Separation where
   left := V(H)
   right := V(G) \ V(H)
@@ -509,7 +800,7 @@ lemma IsCompOf_sUnion_iff {s : Set (Graph α β)} (h : s.Pairwise Graph.Strongly
     have hex : ∃ H ∈ s, x ∈ V(H) := by simpa using vertexSet_mono hH.le hx
     obtain ⟨H', hH', hxH'⟩ := hex
     rwa [← (aux hH').eq_of_mem_mem hH hxH' hx]
-  exact fun H h' ↦ (isClosedSubgraph_sUnion_of_stronglyDisjoint s h h').IsCompOf_of_connected
+  exact fun H h' ↦ (isClosedSubgraph_sUnion_of_stronglyDisjoint s h h').isCompOf_of_connected
     (hs H h')
 
 /-- If `H` is a nonempty subgraph of a connected graph `G`, and each vertex degree in `H`

@@ -7,7 +7,7 @@ namespace Matroid
 
 open Set Function Set.Notation Subtype
 
-variable {α β β' : Type*} {M : Matroid α} {N : Matroid β} {C D : Set α}
+variable {α β β' : Type*} {M : Matroid α} {N : Matroid β} {C D X Y : Set α} {e : α}
 section Iso
 
 /-- Deletions of isomorphic matroids are isomorphic. -/
@@ -183,14 +183,40 @@ delete and contract-sets, which may not be unique.  -/
   (exists_isMinor' : ∃ M₀, M₀ ≤m M ∧ M₀.E = ↑(range toFun) ∧
     ∀ (I : Set N.E), N.Indep I ↔ M₀.Indep ↑(toFun '' I))
 
+/-- `N <i M` means that `N` can be embeddeded in `M` as a minor via a function
+that is not surjective. -/
+@[pp_nodot] structure StrictIsoMinor (N : Matroid β) (M : Matroid α) where
+  (toFun : N.E → M.E)
+  (inj' : Injective toFun)
+  (exists_isMinor' : ∃ M₀, M₀ ≤m M ∧ M₀.E = ↑(range toFun) ∧
+    ∀ (I : Set N.E), N.Indep I ↔ M₀.Indep ↑(toFun '' I))
+  (not_surj : ¬ Surjective toFun)
+
 scoped infix:65 " ≤i " => IsoMinor
+
+scoped infix:65 " <i " => StrictIsoMinor
 
 instance : FunLike (N ≤i M) N.E M.E where
   coe f := f.toFun
   coe_injective' f g := by cases f; cases g; simp
 
+instance : FunLike (N <i M) N.E M.E where
+  coe f := f.toFun
+  coe_injective' f g := by cases f; cases g; simp
+
 instance {α β : Type*} {N : Matroid α} {M : Matroid β} : EmbeddingLike (N ≤i M) N.E M.E where
   injective' f := f.inj'
+
+instance {α β : Type*} {N : Matroid α} {M : Matroid β} : EmbeddingLike (N <i M) N.E M.E where
+  injective' f := f.inj'
+
+@[simps]
+def StrictIsoMinor.isoMinor (e : N <i M) : N ≤i M where
+  toFun := e
+  inj' := e.inj'
+  exists_isMinor' := e.exists_isMinor'
+
+lemma StrictIsoMinor.not_surjective (e : N <i M) : ¬ Surjective e := e.not_surj
 
 theorem IsoMinor.injective (f : N ≤i M) : Injective f :=
   f.inj'
@@ -199,6 +225,19 @@ theorem IsoMinor.exists_isMinor (i : N ≤i M) :
     ∃ M₀, M₀ ≤m M ∧ M₀.E = ↑(range i) ∧ ∀ (I : Set N.E), N.Indep I ↔ M₀.Indep ↑(i '' I) :=
       i.exists_isMinor'
 
+theorem StrictIsoMinor.exists_isMinor (i : N <i M) :
+    ∃ M₀, M₀ <m M ∧ M₀.E = ↑(range i) ∧ ∀ (I : Set N.E), N.Indep I ↔ M₀.Indep ↑(i '' I) := by
+  obtain ⟨M₀, hM₀, hE, hi⟩ := i.exists_isMinor'
+  obtain hM₀ | rfl := hM₀.isStrictMinor_or_eq
+  · exact ⟨M₀, hM₀, hE, hi⟩
+  exfalso
+  refine i.not_surjective ?_
+  rintro ⟨e, he_mem⟩
+  rw [hE] at he_mem
+  simp only [mem_image, mem_range, Subtype.exists, exists_and_right, exists_eq_right] at he_mem
+  obtain ⟨h1, a, ha, h_eq⟩ := he_mem
+  exact ⟨⟨a,ha⟩, h_eq⟩
+
 theorem IsoMinor.exists_iso (i : N ≤i M) :
     ∃ (M₀ : Matroid α) (hM₀ : M₀ ≤m M) (e : N ≂ M₀), ∀ x, inclusion hM₀.subset (e x) = i x := by
   obtain ⟨M₀, hM₀, hE, h⟩ := i.exists_isMinor
@@ -206,6 +245,22 @@ theorem IsoMinor.exists_iso (i : N ≤i M) :
   let e := Equiv.ofInjective _ (Subtype.val_injective.comp (EmbeddingLike.injective i))
   exact ⟨Iso.mk (e.trans (Equiv.setCongr (by simp [hE, range_comp])))
     fun _ ↦ by simp [h, image_image, e], fun ⟨x,hx⟩ ↦ rfl⟩
+
+theorem StrictIsoMinor.exists_iso (i : N <i M) :
+    ∃ (M₀ : Matroid α) (hM₀ : M₀ <m M) (e : N ≂ M₀),
+      ∀ x, inclusion hM₀.isMinor.subset (e x) = i x := by
+  obtain ⟨M₀, hM₀, hE, h⟩ := i.exists_isMinor
+  refine ⟨M₀, hM₀,  ?_⟩
+  let e := Equiv.ofInjective _ (Subtype.val_injective.comp (EmbeddingLike.injective i))
+  exact ⟨Iso.mk (e.trans (Equiv.setCongr (by simp [hE, range_comp])))
+    fun _ ↦ by simp [h, image_image, e], fun ⟨x,hx⟩ ↦ rfl⟩
+
+@[simps!]
+def IsoMinor.strictIsoMinor_of_not_surjective (i : N ≤i M) (hi : ¬ Surjective i) : N <i M where
+  toFun := i.toFun
+  inj' := i.inj'
+  exists_isMinor' := i.exists_isMinor'
+  not_surj := hi
 
 /-- If there is an isomorphism from `N` to a isMinor `M₀` of `M`, then `N ≤i M`. -/
 @[simps] def IsoMinor.ofExistsIso (f : N.E → M.E)
@@ -249,6 +304,10 @@ theorem IsoMinor.exists_iso (i : N ≤i M) :
     obtain ⟨M₀, hM₀, e, h⟩ := i.exists_iso
     exact ⟨M₀✶, hM₀.dual, e.dual, h⟩)
 
+@[simps!]
+def StrictIsoMinor.dual (e : N <i M) : N✶ <i M✶ :=
+  e.isoMinor.dual.strictIsoMinor_of_not_surjective e.not_surjective
+
 /-- If `M₁ ≤i M₂` and `M₂ ≂ M₃` then `M₁ ≤i M₃`. -/
 def IsoMinor.trans_iso {α₁ α₂ α₃ : Type*} {M₁ : Matroid α₁} {M₂ : Matroid α₂} {M₃ : Matroid α₃}
     (i : M₁ ≤i M₂) (e : M₂ ≂ M₃) : M₁ ≤i M₃ := by
@@ -286,6 +345,18 @@ Useful for computability and defeq.  -/
     simp only [comp_apply, ← h']
     rfl )
 
+@[simps!]
+def IsoMinor.trans_strictIsoMinor {α₁ α₂ α₃ : Type*} {M₁ : Matroid α₁} {M₂ : Matroid α₂}
+    {M₃ : Matroid α₃} (i : M₁ ≤i M₂) (i' : M₂ <i M₃) : M₁ <i M₃ :=
+  (i.trans i'.isoMinor).strictIsoMinor_of_not_surjective
+    (fun h ↦ i'.not_surjective <| Surjective.of_comp h)
+
+@[simps!]
+def StrictIsoMinor.trans_isoMinor {α₁ α₂ α₃ : Type*} {M₁ : Matroid α₁} {M₂ : Matroid α₂}
+    {M₃ : Matroid α₃} (i : M₁ <i M₂) (i' : M₂ ≤i M₃) : M₁ <i M₃ :=
+  (i.isoMinor.trans i').strictIsoMinor_of_not_surjective
+    fun h ↦ i.not_surjective <| Surjective.of_comp_left h i'.injective
+
 @[simp] def emptyOn_isoMinor (α : Type*) (M : Matroid β) : emptyOn α ≤i M where
   toFun := IsEmpty.elim' (by simp)
   inj' x := IsEmpty.elim' (by simp) x
@@ -307,6 +378,84 @@ lemma IsoMinor.encard_ground_le (e : N ≤i M) : N.E.encard ≤ M.E.encard := by
   obtain ⟨M₀, hM₀, i, -⟩ := e.exists_iso
   convert encard_le_encard hM₀.subset
   exact i.toEquiv.encard_eq
+
+lemma StrictIsoMinor.encard_ground_lt (e : N <i M) (hN : N.Finite) : N.E.encard < M.E.encard := by
+  obtain ⟨M₀, hM₀, i, -⟩ := e.exists_iso
+  rw [i.toEquiv.encard_eq]
+  refine Finite.encard_lt_encard ?_ hM₀.ssubset
+  rw [← encard_lt_top_iff, ← i.toEquiv.encard_eq, encard_lt_top_iff]
+  exact N.ground_finite
+
+structure IsDeletableSet (M : Matroid α) (N : Matroid β) (D : Set α) where
+  subset_ground : D ⊆ M.E
+  has_minor : Nonempty (N ≤i M ＼ D)
+
+structure IsContractibleSet (M : Matroid α) (N : Matroid β) (C : Set α) where
+  subset_ground : C ⊆ M.E
+  has_minor : Nonempty (N ≤i M ／ C)
+
+abbrev IsDeletable (M : Matroid α) (N : Matroid β) (e : α) := M.IsDeletableSet N {e}
+
+abbrev IsContractible (M : Matroid α) (N : Matroid β) (e : α) := M.IsContractibleSet N {e}
+
+lemma IsDeletable.mem_ground (h : M.IsDeletable N e) : e ∈ M.E := by
+  simpa using h.subset_ground
+
+lemma IsContractible.mem_ground (h : M.IsContractible N e) : e ∈ M.E := by
+  simpa using h.subset_ground
+
+attribute [aesop unsafe 20% (rule_sets := [Matroid])] IsDeletableSet.subset_ground
+  IsContractibleSet.subset_ground IsDeletable.mem_ground IsContractible.mem_ground
+
+lemma IsDeletableSet.isContractibleSet_dual (h : M.IsDeletableSet N X) :
+    M✶.IsContractibleSet N✶ X := by
+  obtain ⟨hE, ⟨e⟩⟩ := h
+  exact ⟨hE, ⟨e.dual.trans_iso <| Iso.ofEq (M.dual_delete ..)⟩⟩
+
+lemma IsContractibleSet.isDeletableSet_dual (h : M.IsContractibleSet N X) :
+    M✶.IsDeletableSet N✶ X := by
+  obtain ⟨hE, ⟨e⟩⟩ := h
+  exact ⟨hE, ⟨e.dual.trans_iso <| Iso.ofEq (M.dual_contract ..)⟩⟩
+
+lemma isDeletableSet_dual_iff : M✶.IsDeletableSet N X ↔ M.IsContractibleSet N✶ X :=
+  ⟨fun h ↦ M.dual_dual ▸ h.isContractibleSet_dual, fun h ↦ N.dual_dual ▸ h.isDeletableSet_dual⟩
+
+lemma isContractibleSet_dual_iff : M✶.IsContractibleSet N X ↔ M.IsDeletableSet N✶ X := by
+  rw [← M.dual_dual, isDeletableSet_dual_iff, dual_dual, dual_dual]
+
+@[simp]
+lemma dual_isDeletableSet_dual_iff : M✶.IsDeletableSet N✶ X ↔ M.IsContractibleSet N X := by
+  rw [isDeletableSet_dual_iff, dual_dual]
+
+@[simp]
+lemma dual_isContractibleSet_dual_iff : M✶.IsContractibleSet N✶ X ↔ M.IsDeletableSet N X := by
+  rw [isContractibleSet_dual_iff, dual_dual]
+
+lemma isDeletable_dual_iff : M✶.IsDeletable N e ↔ M.IsContractible N✶ e :=
+  isDeletableSet_dual_iff
+
+lemma isContractible_dual_iff : M✶.IsContractible N e ↔ M.IsDeletable N✶ e :=
+  isContractibleSet_dual_iff
+
+@[simp]
+lemma dual_isDeletable_dual_iff : M✶.IsDeletable N✶ e ↔ M.IsContractible N e :=
+  dual_isDeletableSet_dual_iff
+
+@[simp]
+lemma dual_isContractible_dual_iff : M✶.IsContractible N✶ e ↔ M.IsDeletable N e :=
+  dual_isContractibleSet_dual_iff
+
+alias ⟨_, IsContractible.dual_isDeletable⟩ := dual_isContractible_dual_iff
+alias ⟨_, IsDeletable.dual_isContractible⟩ := dual_isDeletable_dual_iff
+
+lemma StrictIsoMinor.exists_isDeletable_or_isContractible (i : N <i M) : ∃ e,
+    M.IsContractible N e ∨ M.IsDeletable N e := by
+  obtain ⟨M₀, hm, φ, hφ⟩ := i.exists_iso
+  obtain ⟨e, he, hc | hd⟩ := hm.exists_isMinor_contractElem_or_deleteElem
+  · exact ⟨e, .inl ⟨by simpa, ⟨φ.isoMinor.trans hc.isoMinor⟩⟩⟩
+  exact ⟨e, .inr ⟨by simpa, ⟨φ.isoMinor.trans hd.isoMinor⟩⟩⟩
+
+
 
 
 -- @[simp] theorem IsoMinor.eq_emptyOn (f : M ≤i emptyOn β) : M = emptyOn α := by

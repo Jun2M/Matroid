@@ -63,40 +63,28 @@ lemma concat_nonempty (w : WList α β) (e x) : (w.concat e x).Nonempty := by
 lemma concat_vertexSet_eq (w : WList α β) (e x) : V(w.concat e x) = insert x V(w) := by
   induction w with | nil => simp [pair_comm] | cons _ _ _ ih => simp [ih, insert_comm]
 
--- TODO : golf
+@[simp]
 lemma idxOf_concat_of_mem [DecidableEq α] (hx : x ∈ w) : (w.concat e y).idxOf x = w.idxOf x := by
-  induction w with
-  | nil u => simp_all
-  | cons u f w ih =>
-  rw [cons_concat]
+  induction w with | nil u => simp_all | cons u f w ih =>
   obtain rfl | hu := eq_or_ne x u
-  · rw [idxOf_cons_self, idxOf_cons_self]
-  rw[idxOf_cons_ne hu.symm, idxOf_cons_ne hu.symm ]
+  · rw [cons_concat, idxOf_cons_self, idxOf_cons_self]
+  rw [cons_concat, idxOf_cons_ne hu.symm, idxOf_cons_ne hu.symm]
   simp_all
 
-lemma idxOf_concat_of_nonmem [DecidableEq α] (hx : x ∉ w) : (w.concat e x).idxOf x = w.length + 1
-    := by
+@[simp]
+lemma idxOf_concat_of_notMem [DecidableEq α] (hx : x ∉ w) :
+    (w.concat e x).idxOf x = w.length + 1 := by
   induction w with
-  | nil u =>
-  simp only [nil_concat, nil_length, zero_add]
-  rw[idxOf_cons ]
-  simp [(ne_of_not_mem_cons hx ).symm]
+  | nil u => simp [nil_concat, nil_length, zero_add, (ne_of_not_mem_cons hx).symm]
   | cons u f w ih =>
-  simp only [cons_concat, cons_length]
-  simp at hx
-  rw[idxOf_cons ]
-  have : x ≠ u := by
-    exact hx.1
-  simp [this.symm]
-  exact ih hx.2
+  simp only [mem_cons_iff, not_or, ← ne_eq] at hx
+  simp [hx.1.symm, ih hx.2]
 
 lemma get_concat (w : WList α β) (e x) {n} (hn : n ≤ w.length) :
     (w.concat e x).get n = w.get n := by
-  induction n generalizing w with
-  | zero => simp
-  | succ n IH => cases w with
-    | nil => simp at hn
-    | cons u f w => simp [IH w (by simpa using hn)]
+  induction n generalizing w with | zero => simp | succ n IH => cases w with
+  | nil => simp at hn
+  | cons u f w => simp [IH w (by simpa using hn)]
 
 lemma dInc_concat (w : WList α β) (e x) : (w.concat e x).DInc e w.last x := by
   induction w with simp_all
@@ -150,7 +138,7 @@ lemma append_assoc (w₁ w₂ w₃ : WList α β) : (w₁ ++ w₂) ++ w₃ = w�
 instance : Std.Associative (· ++ · : WList α β → WList α β → WList α β) where
   assoc := append_assoc
 
-@[simp]
+@[simp, grind =]
 lemma append_vertex : (w₁ ++ w₂).vertex = w₁.vertex.dropLast ++ w₂.vertex := by
   induction w₁ with
   | nil => simp
@@ -169,16 +157,16 @@ protected lemma concat_eq_append (w : WList α β) (e) (x) :
     w.concat e x = w ++ (cons w.last e (nil x)) := by
   induction w with simp_all
 
-@[simp]
+@[simp, grind =]
 protected lemma concat_append (w₁ w₂ : WList α β) (e) (x) :
     w₁.concat e x ++ w₂ = w₁ ++ cons w₁.last e w₂ := by
   rw [WList.concat_eq_append, append_assoc, cons_append, nil_append]
 
-@[simp]
+@[simp, grind =]
 lemma append_edge {w₁ w₂ : WList α β} : (w₁ ++ w₂).edge = w₁.edge ++ w₂.edge := by
   induction w₁ with simp_all
 
-@[simp]
+@[simp, grind =]
 lemma append_edgeSet (w₁ w₂ : WList α β) : E(w₁ ++ w₂) = E(w₁) ∪ E(w₂) := by
   ext; simp
 
@@ -415,11 +403,17 @@ lemma DInc.reverse (h : w.DInc e x y) : w.reverse.DInc e y x := by
   | cons_left x e w =>
     convert dInc_concat _ _ _ using 1
     simp
-  | cons _ _ _ ih => apply ih.concat
+  | cons _ _ _ ih => exact ih.concat ..
 
 @[simp]
 lemma dInc_reverse_iff : w.reverse.DInc e x y ↔ w.DInc e y x :=
   ⟨fun h ↦ by simpa using h.reverse, DInc.reverse⟩
+
+lemma dInc_iff_eq_of_dInc_of_vertex_nodup_right (hw : w.vertex.Nodup) (hv : w.DInc e u v) :
+    w.DInc f x v ↔ f = e ∧ x = u := by
+  generalize hw_def' : w.reverse = w'
+  rw [← dInc_reverse_iff, hw_def', dInc_iff_eq_of_dInc_of_vertex_nodup_left (by simpa [← hw_def'])]
+  simpa [← hw_def']
 
 @[simp]
 lemma isLink_reverse_iff : w.reverse.IsLink e x y ↔ w.IsLink e x y := by
@@ -437,6 +431,39 @@ lemma wellFormed_reverse_iff : w.reverse.WellFormed ↔ w.WellFormed := by
   simp [WellFormed]
 
 alias ⟨_, WellFormed.reverse⟩ := wellFormed_reverse_iff
+
+@[simp]
+lemma idxOf_reverse [DecidableEq α] (hw : w.vertex.Nodup) (hx : x ∈ w) :
+    w.reverse.idxOf x = w.length - w.idxOf x := by
+  fun_induction WList.idxOf with
+  | case1 => simp
+  | case2 => simp_all
+  | case3 e w x =>
+    have hw' : (w.reverse.concat e x).vertex.Nodup := by
+      simp_all [← concat_eq_append, List.nodup_concat]
+    simp only [reverse_cons, cons_length, tsub_zero]
+    rw [← reverse_length, ← @concat_length _ _ x e w.reverse, idxOf_eq_length_iff hw']
+    simp
+  | case4 u e w x hne IH =>
+    simp_all only [cons_vertex, nodup_cons, mem_vertex, mem_cons_iff, reverse_cons, cons_length,
+      reduceSubDiff, forall_const]
+    replace hx : x ∈ w := by tauto
+    rw [← IH hx]
+    refine idxOf_concat_of_mem (by simpa)
+
+@[simp]
+lemma idxOf_reverse_add_idxOf [DecidableEq α] (hw : w.vertex.Nodup) (hx : x ∈ w) :
+    w.reverse.idxOf x + w.idxOf x = w.length := by
+  have h₁ := idxOf_reverse hw hx
+  have h₂ : w.idxOf x ≤ w.length := idxOf_mem_le hx
+  omega
+
+@[simp]
+lemma idxOf_add_idxOf_reverse [DecidableEq α] (hw : w.vertex.Nodup) (hx : x ∈ w) :
+    w.idxOf x + w.reverse.idxOf x = w.length := by
+  rw [add_comm]
+  exact idxOf_reverse_add_idxOf hw hx
+
 
 /-- The last edge of a nonempty `WList` -/
 def Nonempty.lastEdge (w : WList α β) (hw : w.Nonempty) : β := hw.reverse.firstEdge
@@ -515,6 +542,11 @@ lemma map_vertex (w : WList α β) (f : α → α') : (w.map f).vertex = w.verte
   induction w with
   | nil x => simp [map]
   | cons x e w ih => simp [map, ih]
+
+@[simp]
+lemma mem_map_iff (w : WList α β) (f : α → α') (x : α') : x ∈ w.map f ↔ ∃ y, y ∈ w ∧ f y = x := by
+  rw [← mem_vertex, map_vertex]
+  simp
 
 @[simp]
 lemma map_edge (w : WList α β) (f : α → α') : (w.map f).edge = w.edge := by

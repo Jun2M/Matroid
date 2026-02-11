@@ -1,4 +1,4 @@
-import Matroid.Graph.WList.Sublist
+import Matroid.Graph.WList.TakeDrop
 import Matroid.Graph.Subgraph.Delete
 
 /-
@@ -113,7 +113,7 @@ lemma IsWalk.of_concat (h : G.IsWalk (w.concat e x)) : G.IsWalk w := by
     exact (ih h.2).cons (by simpa using h.1)
 
 @[simp]
-lemma isWalk_concat_iff : G.IsWalk (w.concat e x) ↔ G.IsWalk w ∧ G.IsLink e w.last x :=
+lemma concat_isWalk_iff : G.IsWalk (w.concat e x) ↔ G.IsWalk w ∧ G.IsLink e w.last x :=
   ⟨fun h ↦ ⟨h.of_concat, by induction w with simp_all⟩, fun h ↦ h.1.concat h.2⟩
 
 lemma IsWalk.of_append_left (h : G.IsWalk (w₁ ++ w₂)) (h_eq : w₁.last = w₂.first) :
@@ -143,6 +143,139 @@ lemma IsWalk.reverse (hw : G.IsWalk w) : G.IsWalk w.reverse := by
 @[simp]
 lemma isWalk_reverse_iff : G.IsWalk w.reverse ↔ G.IsWalk w :=
   ⟨fun h ↦ by simpa using h.reverse, IsWalk.reverse⟩
+
+lemma IsWalk.deloop [DecidableEq α] (h : G.IsWalk w) : G.IsWalk w.deloop :=
+  h.sublist w.deloop_isSublist
+
+lemma IsWalk.deloop_edge_eq_filter [DecidableEq α] [DecidablePred (∀ x, ¬ G.IsLoopAt · x)]
+    (h : G.IsWalk w) : w.deloop.edge = w.edge.filter (∀ x, ¬ G.IsLoopAt · x) := by
+  induction w with
+  | nil u => simp
+  | cons u e w ih =>
+    simp only [cons_isWalk_iff, deloop_cons_eq_ite, cons_edge] at h ⊢
+    specialize ih h.2
+    split_ifs with heq
+    · subst heq
+      rwa [List.filter_cons_of_neg]
+      simp only [decide_eq_true_eq, not_forall, not_not]
+      use w.first, h.1
+    rw [List.filter_cons_of_pos, WList.cons_edge, ih]
+    simp only [decide_eq_true_eq]
+    rintro x hex
+    obtain rfl := hex.eq_of_inc h.1.inc_left
+    exact heq <| hex.eq_of_inc h.1.inc_right
+
+@[simp]
+lemma IsWalk.mem_deloop_edge_iff [DecidableEq α] (h : G.IsWalk w) (e : β) :
+    e ∈ w.deloop.edge ↔ e ∈ w.edge ∧ ∀ x, ¬ G.IsLoopAt e x := by
+  classical
+  simp [h.deloop_edge_eq_filter]
+
+lemma edgeRemove_first (hF : ∀ e ∈ w.edge, e ∈ F → ∃ x, G.IsLoopAt e x)
+    [DecidablePred (· ∈ F)] (hw : G.IsWalk w) : (w.edgeRemove F).first = w.first := by
+  induction w with
+  | nil => simp
+  | cons u e w ih =>
+    simp only [cons_isWalk_iff, cons_edge, List.mem_cons] at hw hF
+    rw [edgeRemove_cons]
+    split_ifs with he; swap
+    · simp
+    obtain ⟨x, hex⟩ := hF e (.inl rfl) he
+    obtain rfl := hex.eq_of_inc hw.1.inc_left
+    obtain rfl := hex.eq_of_inc hw.1.inc_right
+    exact ih (fun f hf hfF ↦ hF f (.inr hf) hfF) hw.2
+
+lemma edgeRemove_isSublist (hF : ∀ e ∈ w.edge, e ∈ F → ∃ x, G.IsLoopAt e x)
+    [DecidablePred (· ∈ F)] (hw : G.IsWalk w) : (w.edgeRemove F).IsSublist w := by
+  induction w with
+  | nil => simp
+  | cons u e w ih =>
+    simp only [cons_isWalk_iff, cons_edge, List.mem_cons] at hw hF
+    rw [edgeRemove_cons]
+    split_ifs with he
+    · exact (ih (fun f hf hfF ↦ hF f (.inr hf) hfF) hw.2).trans (by simp)
+    · exact (ih (fun f hf hfF ↦ hF f (.inr hf) hfF) hw.2).cons₂ _ _
+        (edgeRemove_first (fun f hf hfF ↦ hF f (.inr hf) hfF) hw.2)
+
+@[simp]
+lemma mem_edgeRemove_iff (hF : ∀ e ∈ w.edge, e ∈ F → ∃ x, G.IsLoopAt e x)
+    [DecidablePred (· ∈ F)] (hw : G.IsWalk w) : x ∈ w.edgeRemove F ↔ x ∈ w := by
+  induction w with
+  | nil => simp
+  | cons u e w ih =>
+    simp only [cons_isWalk_iff, cons_edge, List.mem_cons, mem_cons_iff] at hw hF ⊢
+    rw [edgeRemove_cons]
+    split_ifs with he; swap
+    · simp [ih (fun f hf hfF ↦ hF f (.inr hf) hfF) hw.2]
+    obtain ⟨y, hey⟩ := hF e (.inl rfl) he
+    obtain rfl := hey.eq_of_inc hw.1.inc_left
+    obtain rfl := hey.eq_of_inc hw.1.inc_right
+    simp only [ih (fun f hf hfF ↦ hF f (.inr hf) hfF) hw.2, iff_or_self]
+    exact fun h ↦ h ▸ first_mem
+
+lemma IsWalk.edgeRemove [DecidablePred (· ∈ F)] (hw : G.IsWalk w)
+    (hF : ∀ e ∈ w.edge, e ∈ F → ∃ x, G.IsLoopAt e x) : G.IsWalk (w.edgeRemove F) := by
+  induction w with
+  | nil => simp_all
+  | cons u e w ih =>
+    simp only [cons_isWalk_iff, cons_edge, List.mem_cons] at hw hF
+    rw [edgeRemove_cons]
+    split_ifs with he
+    · exact ih hw.2 (fun f hf hfF ↦ hF f (.inr hf) hfF)
+    · refine cons_isWalk_iff.mpr ⟨?_, ih hw.2 (fun f hf hfF ↦ hF f (.inr hf) hfF)⟩
+      rw [edgeRemove_first (fun f hf hfF ↦ hF f (.inr hf) hfF) hw.2]
+      exact hw.1
+
+lemma deloop_isSublist_edgeRemove [DecidableEq α] [DecidablePred (· ∈ F)]
+    (hw : G.IsWalk w) (hF : ∀ e ∈ w.edge, e ∈ F → ∃ x, G.IsLoopAt e x) :
+    w.deloop.IsSublist (w.edgeRemove F) := by
+  induction w with
+  | nil => simp
+  | cons u e w ih =>
+    simp only [cons_isWalk_iff, cons_edge, List.mem_cons] at hw hF
+    rw [deloop_cons_eq_ite, edgeRemove_cons]
+    split_ifs with huwf heF heF
+    · exact ih hw.2 (fun f hf hfF ↦ hF f (.inr hf) hfF)
+    · subst u
+      exact (ih hw.2 (fun f hf hfF ↦ hF f (.inr hf) hfF)).cons ..
+    · obtain ⟨x, hex⟩ := hF e (.inl rfl) heF
+      obtain rfl := hex.eq_of_inc hw.1.inc_left
+      exact (huwf <| hex.eq_of_inc hw.1.inc_right).elim
+    apply (ih hw.2 (fun f hf hfF ↦ hF f (.inr hf) hfF)).cons₂
+    rw [edgeRemove_first (fun f hf hfF ↦ hF f (.inr hf) hfF) hw.2, deloop_first]
+
+lemma edgeRemove_eq_deloop [DecidableEq α] [DecidablePred (· ∈ F)]
+    (hw : G.IsWalk w) (hF : ∀ e ∈ w.edge, e ∈ F ↔ (∃ x, G.IsLoopAt e x)) :
+    w.edgeRemove F = w.deloop := by
+  induction w with
+  | nil => simp
+  | cons u e w ih =>
+    simp only [cons_isWalk_iff, cons_edge, List.mem_cons] at hw hF
+    rw [deloop_cons_eq_ite, edgeRemove_cons]
+    split_ifs with heF huwf huwf
+    on_goal 2 =>
+      obtain ⟨x, hex⟩ := hF e (.inl rfl) |>.mp heF
+      obtain rfl := hex.eq_of_inc hw.1.inc_left
+      exact (huwf <| hex.eq_of_inc hw.1.inc_right).elim
+    all_goals simp_all
+
+lemma edgeRemove_eq_self_of_noloop [DecidablePred (· ∈ F)] (hw : G.IsWalk w)
+    (hF : ∀ e ∈ w.edge, e ∈ F → ∃ x, G.IsLoopAt e x) (hnl : w.NoLoop) : w.edgeRemove F = w := by
+  classical
+  apply (edgeRemove_isSublist hF hw).antisymm
+  nth_rw 1 [← deloop_eq_self_iff.mpr hnl]
+  exact deloop_isSublist_edgeRemove hw hF
+
+lemma IsWalk.of_forall_isLink (h : G.IsWalk w) (he : ∀ ⦃e x y⦄, G.IsLink e x y → H.IsLink e x y)
+    (hne : w.Nonempty) : H.IsWalk w := by
+  induction h with
+  | nil hx => simp at hne
+  | cons hw h ih =>
+    rename_i w
+    simp only [cons_isWalk_iff, he h, true_and]
+    refine w.nil_or_nonempty.elim (fun hnil ↦ ?_) ih
+    rw [hnil.eq_nil_first]
+    simp [he h |>.right_mem]
 
 lemma IsWalk.of_le (h : H.IsWalk w) (hle : H ≤ G) : G.IsWalk w := by
   induction h with
@@ -248,6 +381,12 @@ lemma IsWalk.eq_of_edge_eq_first_eq (h₁ : G.IsWalk w₁) (h₂ : G.IsWalk w₂
       rw [← h_edge.1, ← h_first, h.isLink_iff_eq] at h₂
       rw [h_edge.1, h_first, ih h₂.2 h₂.1.symm h_edge.2]
 
+lemma IsWalk.not_loopAt_of_noLoop (h : G.IsWalk w) (hloop : w.NoLoop) (he : e ∈ w.edge) :
+    ∀ x, ¬ G.IsLoopAt e x := by
+  rintro x hx
+  rw [IsLoopAt, ← h.isLink_iff_isLink_of_mem he] at hx
+  simp [hloop] at hx
+
 /-- `G.IsWalkFrom S T w` means that `w` is a walk of `G` with one end in `S` and the other in `T`.-/
 @[mk_iff]
 structure IsWalkFrom (G : Graph α β) (S T : Set α) (w : WList α β) : Prop where
@@ -300,6 +439,37 @@ lemma walk_isWalk (h : G.IsLink e u v) : G.IsWalk h.walk := by
 
 end IsLink
 
+lemma Isolated.eq_last_of_mem (hisol : G.Isolated x) {w} (hw : G.IsWalk w) (hx : x ∈ w) :
+    x = w.last := by
+  classical
+  obtain hw' | hw' := (w.suffixFromVertex x).nil_or_nonempty
+  · obtain heq := w.suffixFromVertex_first hx
+    rw [hw'.first_eq_last, suffixFromVertex_last] at heq
+    exact heq.symm
+  exfalso
+  obtain ⟨u, e, w', heq⟩ := hw'.exists_cons
+  obtain rfl := by simpa [heq] using w.suffixFromVertex_first hx
+  have := heq ▸ (hw.suffix <| w.suffixFromVertex_isSuffix u)
+  simp only [cons_isWalk_iff] at this
+  exact hisol.not_isLink this.1
+
+lemma Isolated.eq_first_of_mem (hisol : G.Isolated x) (hw : G.IsWalk w) (hx : x ∈ w) :
+    x = w.first := by
+  simpa using hisol.eq_last_of_mem (w := w.reverse) hw.reverse (by simpa)
+
+lemma Isolated.isWalk_nil_of_mem (hisol : G.Isolated x) (hw : G.IsWalk w) (hx : x ∈ w) :
+    w.Nil := by
+  match w with
+  | .nil u => simp
+  | .cons u e w =>
+    obtain rfl := by simpa using hisol.eq_first_of_mem hw hx
+    simp only [cons_isWalk_iff] at hw
+    exact (hisol.not_isLink hw.1).elim
+
+@[simp]
+lemma Isolated.eq_nil_of_mem (hisol : G.Isolated x) (hw : G.IsWalk w) (hx : x ∈ w) : w = nil x :=
+  hisol.isWalk_nil_of_mem hw hx |>.eq_nil_of_mem hx
+
 section Subgraph
 
 variable {X : Set α}
@@ -325,15 +495,29 @@ lemma isWalk_induce_iff' (hw : w.Nonempty) : G[X].IsWalk w ↔ G.IsWalk w ∧ V(
 
 /-- This is almost true without the `X ⊆ V(G)` assumption; the exception is where
 `w` is a nil walk on a vertex in `X \ V(G)`. -/
-lemma isWalk_induce_iff (hXV : X ⊆ V(G)) : G[X].IsWalk w ↔ G.IsWalk w ∧ V(w) ⊆ X :=
+lemma isWalk_induce_iff_of_subset (hXV : X ⊆ V(G)) : G[X].IsWalk w ↔ G.IsWalk w ∧ V(w) ⊆ X :=
   ⟨fun h ↦ ⟨h.of_le (G.induce_le hXV), h.vertexSet_subset⟩, fun h ↦ h.1.induce h.2⟩
+
+lemma isWalk_induce_iff : G[X].IsWalk w ↔ (∃ x ∈ X \ V(G), w = nil x) ∨ G.IsWalk w ∧ V(w) ⊆ X := by
+  have hile : G[V(G) ∩ X] ≤i G := induce_isInducedSubgraph inter_subset_left
+  have hileX : G[V(G) ∩ X] ≤i G[X] := G.induce_isInducedSubgraph_mono_right inter_subset_right
+  refine ⟨fun h ↦ ?_, ?_⟩; swap
+  · rintro (⟨x, hxX, rfl⟩ | ⟨hw, hwX⟩)
+    · simp [hxX.1]
+    exact hw.isWalk_isInducedSubgraph hile (by simp [hwX, hw.vertexSet_subset]) |>.of_le hileX.le
+  have hwX := by simpa using h.vertexSet_subset
+  refine (em (Disjoint V(w) (X \ V(G))) |>.symm).imp (fun h1 ↦ ?_) (fun hw ↦ ?_)
+  · obtain ⟨x, hxw, hxX⟩ := not_disjoint_iff.mp h1
+    exact ⟨x, hxX, (G.diff_subset_isolatedSet_induce X hxX).eq_nil_of_mem h hxw⟩
+  rw [disjoint_comm, disjoint_diff_iff, inter_eq_right.mpr <| by exact h.vertexSet_subset] at hw
+  exact ⟨h.isWalk_isInducedSubgraph hileX (by simp [hw, hwX]) |>.of_le hile.le, hwX⟩
 
 lemma IsWalk.vertexSet_subset_of_induce (hw : G[X].IsWalk w) : V(w) ⊆ X :=
   fun _ hxw => hw.vertex_mem_of_mem hxw
 
 @[simp]
 lemma isWalk_vertexDelete_iff : (G - X).IsWalk w ↔ G.IsWalk w ∧ Disjoint V(w) X := by
-  rw [vertexDelete_def, isWalk_induce_iff diff_subset, subset_diff, and_congr_right_iff,
+  rw [vertexDelete_def, isWalk_induce_iff_of_subset diff_subset, subset_diff, and_congr_right_iff,
     and_iff_right_iff_imp]
   exact fun h _ ↦ h.vertexSet_subset
 
@@ -493,6 +677,7 @@ lemma toGraph_edgeSet (w : WList α β) : E(w.toGraph) = E(w) := by
 lemma toGraph_vertexSet_nonempty (w : WList α β) : V(w.toGraph).Nonempty := by
   simp
 
+@[simp]
 lemma WellFormed.toGraph_isLink (h : w.WellFormed) : w.toGraph.IsLink = w.IsLink := by
   ext e x y
   induction w with

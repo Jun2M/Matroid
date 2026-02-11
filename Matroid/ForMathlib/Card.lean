@@ -27,13 +27,14 @@ theorem Set.Finite.encard_union_eq_add_encard_iff_disjoint (h : (s ∪ t).Finite
     simp
   rw [encard_pair hne]
 
+@[simp]
+lemma encard_pair_iff (e f : α) : encard {e,f} = 2 ↔ e ≠ f := by
+  refine ⟨?_, encard_pair⟩
+  rintro h rfl
+  simp at h
+
 lemma two_le_encard_iff_nontrivial : 2 ≤ s.encard ↔ s.Nontrivial := by
   rw [← s.one_lt_encard_iff_nontrivial, ← one_add_one_eq_two, ENat.add_one_le_iff (by simp)]
-
-lemma Set.Subsingleton.eq_or_eq_of_subset (h : s.Subsingleton) (hts : t ⊆ s) : t = ∅ ∨ t = s := by
-  obtain rfl | ⟨x, rfl⟩ := (h.anti hts).eq_empty_or_singleton
-  · simp
-  simp [h.eq_singleton_of_mem (by simpa using hts)]
 
 theorem Set.Infinite.exists_finite_subset_encard_gt (hs : s.Infinite) (b : ℕ) :
     ∃ t ⊆ s, b < t.encard ∧ t.Finite := by
@@ -60,6 +61,12 @@ theorem Set.encard_le_cast_iff {n : ℕ} :
     exact h.2
   rintro ⟨t, rfl, ht⟩
   simpa
+
+lemma finite_of_encard_eq_ofNat {n : ℕ} [n.AtLeastTwo] (h : s.encard = ofNat(n)) : s.Finite :=
+  finite_of_encard_eq_coe h
+
+lemma finite_of_encard_eq_one (h : s.encard = 1) : s.Finite :=
+  finite_of_encard_eq_coe h
 
 theorem Equiv.encard_univ_eq (e : α ≃ β) : encard (univ : Set α) = encard (univ : Set β) := by
   rw [encard_univ, encard_univ, ENat.card_congr e]
@@ -194,3 +201,9 @@ lemma finsum_one (s : Set α) : ∑ᶠ x ∈ s, 1 = s.ncard := by
   -- · rw [finsum_mem_eq_finite_toFinset_sum _ hs, ncard_eq_toFinset_card _ hs]
   --   simp
   -- rw [hs.ncard, finsum_mem_eq_zero_of_infinite (by simpa [Function.support])]
+
+lemma ENat.card_coe_setOf_ne (a : α) : ENat.card {i | i ≠ a} = ENat.card α - 1 := by
+  rw [← encard_univ α, ENat.card_coe_set_eq, ← encard_diff_singleton_of_mem (mem_univ a)]
+  convert rfl using 2
+  ext
+  simp

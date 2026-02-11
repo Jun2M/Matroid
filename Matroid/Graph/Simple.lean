@@ -39,8 +39,18 @@ lemma Loopless.mono (hG : G.Loopless) (hle : H ≤ G) : H.Loopless := by
   rw [loopless_iff_forall_ne_of_adj] at hG ⊢
   exact fun x y hxy ↦ hG x y <| hxy.of_le hle
 
+@[simp]
 lemma Inc.isNonloopAt [G.Loopless] (h : G.Inc e x) : G.IsNonloopAt e x :=
   h.isLoopAt_or_isNonloopAt.elim (False.elim ∘ Loopless.not_isLoopAt _ _) id
+
+@[simp]
+lemma setOf_isLoopAt_empty [G.Loopless] : {e | G.IsLoopAt e x} = ∅ := by
+  ext e
+  simp
+
+lemma setOf_isNonloopAt_incEdges [G.Loopless] (x : α) : {e | G.IsNonloopAt e x} = E(G, x) := by
+  ext e
+  simp +contextual [iff_def, IsNonloopAt.inc]
 
 instance [G.Loopless] (X : Set α) : G[X].Loopless where
   not_isLoopAt e x (h : G[X].IsLink e x x) := h.1.adj.ne rfl
@@ -67,6 +77,82 @@ lemma eq_noEdge_or_vertexSet_nontrivial (G : Graph α β) [G.Loopless] :
 
 instance Loopless.union [G.Loopless] [H.Loopless] : (G ∪ H).Loopless where
   not_isLoopAt := by simp [union_isLoopAt_iff]
+
+/-- Maximally loopless subgraph of `G`. -/
+def loopRemove (G : Graph α β) : Graph α β := G ↾ {e | ∀ x, ¬ G.IsLoopAt e x}
+
+instance : (loopRemove G).Loopless where
+  not_isLoopAt e x := by
+    simp only [loopRemove, edgeRestrict_isLoopAt_iff, mem_setOf_eq, not_and, not_forall, not_not]
+    exact fun h ↦ ⟨x, h⟩
+
+lemma loopRemove_le (G : Graph α β) : loopRemove G ≤ G := edgeRestrict_le
+
+lemma loopRemove_isSpanningSubgraph (G : Graph α β) : loopRemove G ≤s G :=
+  edgeRestrict_isSpanningSubgraph
+
+@[simp]
+lemma loopRemove_vertexSet : V(loopRemove G) = V(G) := by
+  simp only [loopRemove, edgeRestrict_vertexSet]
+
+@[simp]
+lemma loopRemove_edgeSet : E(loopRemove G) = {e ∈ E(G) | ∀ x, ¬ G.IsLoopAt e x} := by
+  simp only [loopRemove, edgeRestrict_edgeSet]
+  rw [setOf_and]
+  rfl
+
+@[simp]
+lemma loopRemove_isLink : (loopRemove G).IsLink e x y ↔ G.IsLink e x y ∧ x ≠ y := by
+  rw [and_comm]
+  simp only [loopRemove, edgeRestrict_isLink, mem_setOf_eq, ne_eq, and_congr_left_iff]
+  intro h
+  rw [iff_not_comm]
+  simp only [not_forall, not_not]
+  refine ⟨fun h' ↦ ⟨x, h' ▸ h⟩, fun ⟨z, hz⟩ ↦ ?_⟩
+  obtain ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ := hz.isLink_iff.mp h <;> rfl
+
+/-- Proof that `loopRemove` is the maximally loopless subgraph of `G`. -/
+lemma le_loopRemove [H.Loopless] (h : H ≤ G) : H ≤ loopRemove G where
+  vertex_subset := by simp [vertexSet_mono h]
+  isLink_of_isLink e x y he := by
+    rw [loopRemove_isLink]
+    refine ⟨he.of_le h, he.ne⟩
+
+@[simp]
+lemma loopRemove_eq [G.Loopless] : loopRemove G = G :=
+  (loopRemove_le G).antisymm (le_loopRemove le_rfl)
+
+@[simp]
+lemma loopRemove_eq_iff [G.Loopless] : loopRemove G = G ↔ G.Loopless :=
+  ⟨fun _ ↦ ‹G.Loopless›, fun _ ↦ loopRemove_eq⟩
+
+lemma IsPath.loopRemove (hP : G.IsPath P) : (loopRemove G).IsPath P := by
+  induction P with
+  | nil => simp_all
+  | cons x e w ih =>
+    simp_all only [cons_isPath_iff, loopRemove_isLink, ne_eq, true_and, not_false_eq_true, and_true,
+      forall_const]
+    rintro rfl
+    exact hP.2.2 first_mem
+
+lemma loopRemove_isSpanningSubgraph_edgeDelete_isLoopAt (G : Graph α β) (x : α) :
+    loopRemove G ≤s (G ＼ {e | G.IsLoopAt e x}) := by
+  rw [edgeDelete_eq_edgeRestrict]
+  apply edgeRestrict_isSpanningSubgraph_edgeRestrict
+  intro e ⟨he, hel⟩
+  use he, he, hel x
+
+lemma loopRemove_le_edgeDelete_isLoopAt (G : Graph α β) (x : α) :
+    loopRemove G ≤ (G ＼ {e | G.IsLoopAt e x}) :=
+  G.loopRemove_isSpanningSubgraph_edgeDelete_isLoopAt x |>.le
+
+lemma IsLoopAt.loopRemove_isSpanningSubgraph_edgeDelete (h : G.IsLoopAt e x) :
+    loopRemove G ≤s (G ＼ {e}) :=
+  G.loopRemove_isSpanningSubgraph_edgeDelete_isLoopAt x |>.trans
+  <| G.edgeDelete_isSpanningSubgraph_anti_right <| by simpa
+
+lemma IsLoopAt.loopRemove_le_edgeDelete (h : G.IsLoopAt e x) : loopRemove G ≤ (G ＼ {e}) :=
+  h.loopRemove_isSpanningSubgraph_edgeDelete.le
 
 section Simple
 
@@ -199,7 +285,7 @@ lemma IsPath.toGraph_simple {P : WList α β} (hP : G.IsPath P) : P.toGraph.Simp
       · simp_all
       obtain rfl | hne' := eq_or_ne y u
       · simp_all
-      exact ih hP.1 (by simpa [hne, hne'] using he) (by simpa [hne, hne'] using hf)
+      exact ih hP.2.1 (by simpa [hne, hne'] using he) (by simpa [hne, hne'] using hf)
 
 end Simple
 
@@ -235,3 +321,23 @@ lemma exists_eq_banana_of_encard [G.Loopless] (hV : V(G).encard = 2) :
 
 lemma banana_loopless (hab : a ≠ b) (F : Set α) : (banana a b F).Loopless where
   not_isLoopAt e x := by simp [hab]
+
+instance lineGraph_simple : L(G).Simple where
+  not_isLoopAt e x h := by
+    unfold IsLoopAt at h
+    simp [-isLink_self_iff] at h
+  eq_of_isLink e f x y he hf := by
+    obtain ⟨rfl, hne, h⟩ := he
+    obtain ⟨rfl, -, h'⟩ := hf
+    rfl
+
+instance mixedLineGraph_simple : L'(G).Simple where
+  not_isLoopAt ab x h := by
+    unfold IsLoopAt at h
+    cases x <;> simp [-isLink_self_iff] at h
+  eq_of_isLink e f x y h1 h2 := by
+    cases e
+    cases f
+    rw [mixedLineGraph_isLink] at h1 h2
+    rw [← h1.2] at h2
+    simp_all
