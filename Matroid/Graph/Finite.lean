@@ -1,4 +1,5 @@
 import Matroid.Graph.Walk.Cycle
+import Matroid.Graph.Constructions.Basic
 import Matroid.Graph.Simple
 import Matroid.Graph.Lattice
 import Mathlib.Data.Set.Finite.List
@@ -191,6 +192,13 @@ lemma finite_of_vertexSet_finite [G.Simple] (h : V(G).Finite) : G.Finite where
   edgeSet_finite := by
     change Finite _ at *
     exact Finite.of_injective _ G.ends_injective
+
+instance completeBipartiteGraph_finite (m n : ℕ) : (CompleteBipartiteGraph m n).Finite :=
+  finite_of_vertexSet_finite (G := CompleteBipartiteGraph m n) <| by
+    rw [show V(CompleteBipartiteGraph m n) = Sum.inl '' Set.Iio m ∪ Sum.inr '' Set.Iio n by
+      ext x
+      cases x <;> simp [CompleteBipartiteGraph]]
+    exact (finite_lt_nat m).image Sum.inl |>.union <| (finite_lt_nat n).image Sum.inr
 
 @[simp]
 lemma Simple.vertexSet_finite_iff [G.Simple] : V(G).Finite ↔ G.Finite :=

@@ -1,3 +1,4 @@
+import Matroid.Graph.Constructions.Basic
 import Matroid.Graph.Subgraph.Union
 import Matroid.Graph.Walk.Path
 
@@ -200,6 +201,23 @@ lemma singleEdge_simple (hne : x ≠ y) (e : β) : (Graph.singleEdge x y e).Simp
     simp only [← isLink_self_iff, singleEdge_isLink, not_and, not_or]
     aesop
   eq_of_isLink := by aesop
+
+instance completeBipartiteGraph_simple (m n : ℕ) : (CompleteBipartiteGraph m n).Simple where
+  not_isLoopAt e x := by
+    rw [← isLink_self_iff]
+    rintro ⟨_, _, h | h⟩
+    · cases h.1.symm.trans h.2
+    · cases h.2.symm.trans h.1
+  eq_of_isLink := by
+    rintro e f x y ⟨_, _, hxy | hxy⟩ ⟨_, _, hxy' | hxy'⟩
+    · apply Prod.ext
+      · simpa using hxy.1.symm.trans hxy'.1
+      · simpa using hxy.2.symm.trans hxy'.2
+    · cases hxy.1.symm.trans hxy'.1
+    · cases hxy.1.symm.trans hxy'.1
+    · apply Prod.ext
+      · simpa using hxy.2.symm.trans hxy'.2
+      · simpa using hxy.1.symm.trans hxy'.1
 
 noncomputable def adjIncFun (G : Graph α β) (x : α) : N(G, x) → E(G, x) :=
   fun y ↦ ⟨y.2.choose, _, y.2.choose_spec⟩
