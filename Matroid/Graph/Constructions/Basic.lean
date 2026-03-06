@@ -364,6 +364,33 @@ lemma banana_isComplete_iff (a b : α) (F : Set β) :
   simp only [hne, false_or]
   exact ⟨fun h ↦ ⟨_, h a (by simp) b (by simp) hne |>.choose_spec.edge_mem⟩, banana_isComplete a b⟩
 
+/-- The complete bipartite graph with parts `Fin m` and `Fin n`. -/
+@[simps (attr := grind =)]
+def CompleteBipartiteGraph (m n : ℕ) : Graph (Fin m ⊕ Fin n) (Fin m × Fin n) where
+  vertexSet := Set.univ
+  edgeSet := Set.univ
+  IsLink e x y := (x = Sum.inl e.1 ∧ y = Sum.inr e.2) ∨ (x = Sum.inr e.2 ∧ y = Sum.inl e.1)
+  isLink_symm e he x y h := by
+    rcases h with h | h
+    · exact Or.inr ⟨h.2, h.1⟩
+    · exact Or.inl ⟨h.2, h.1⟩
+  eq_or_eq_of_isLink_of_isLink := by
+    rintro e x y z w (hxy | hxy) (hzw | hzw) <;> aesop
+  edge_mem_iff_exists_isLink e := by
+    refine ⟨fun _ ↦ ?_, fun _ ↦ by simp⟩
+    exact ⟨Sum.inl e.1, Sum.inr e.2, Or.inl ⟨rfl, rfl⟩⟩
+  left_mem_of_isLink := by simp
+
+@[simp]
+lemma completeBipartiteGraph_adj_iff (m n : ℕ) (x y : Fin m ⊕ Fin n) :
+    (CompleteBipartiteGraph m n).Adj x y ↔
+      (∃ i : Fin m, ∃ j : Fin n, x = Sum.inl i ∧ y = Sum.inr j) ∨
+      (∃ i : Fin m, ∃ j : Fin n, x = Sum.inr j ∧ y = Sum.inl i) := by
+  cases x <;> cases y <;> simp [Adj, CompleteBipartiteGraph]
+
+/-- The complete bipartite graph `K₃,₃`. -/
+abbrev K33 : Graph (Fin 3 ⊕ Fin 3) (Fin 3 × Fin 3) := CompleteBipartiteGraph 3 3
+
 /-- The star graph with `n` leaves with center `v` -/
 @[simps (attr := grind =)]
 def StarGraph (v : α) (f : β →. α) : Graph α β where

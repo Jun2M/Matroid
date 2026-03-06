@@ -274,6 +274,31 @@ def Bipartite (G : Graph α β) : Prop := Nonempty G.Bipartition
 lemma Bipartition.bipartite (B : G.Bipartition) : G.Bipartite :=
   ⟨B⟩
 
+/-- The obvious bipartition of a complete bipartite graph. -/
+@[simps]
+def CompleteBipartiteGraph.bipartition (m n : ℕ) :
+    (CompleteBipartiteGraph m n).Bipartition where
+  left := Set.range Sum.inl
+  right := Set.range Sum.inr
+  union_eq := by
+    ext x
+    cases x <;> simp
+  disjoint := by
+    rw [Set.disjoint_left]
+    rintro x ⟨i, rfl⟩ ⟨j, h⟩
+    cases h
+  forall_edge e he := by
+    rcases e with ⟨i, j⟩
+    exact ⟨Sum.inl i, by simp, Sum.inr j, by simp, by simp [CompleteBipartiteGraph]⟩
+
+@[simp]
+lemma completeBipartiteGraph_bipartite (m n : ℕ) : (CompleteBipartiteGraph m n).Bipartite :=
+  ⟨CompleteBipartiteGraph.bipartition m n⟩
+
+@[simp]
+lemma K33_bipartite : K33.Bipartite :=
+  completeBipartiteGraph_bipartite 3 3
+
 /-- A subgraph of a bipartite graph is bipartite -/
 lemma Bipartite.of_le (hG : G.Bipartite) (hle : H ≤ G) : H.Bipartite := by
   obtain ⟨B⟩ := hG
