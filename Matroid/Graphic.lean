@@ -1,6 +1,8 @@
 import Matroid.Axioms.Circuit
+import Matroid.Connectivity.Separation.Tutte
 import Matroid.Minor.Contract
 import Matroid.Graph.Forest
+import Matroid.Graph.Connected.MixedLineGraph
 import Matroid.Graph.Minor.Conn
 
 variable {α β : Type*} {G H : Graph α β} {u v x x₁ x₂ y y₁ y₂ z : α} {e e' f g : β}
@@ -115,3 +117,200 @@ lemma cycleMatroid_isRestriction_of_isLink (hl : ∀ ⦃e x y⦄, G.IsLink e x y
 
 lemma cycleMatroid_isRestriction_of_le (h : G ≤ H) : G.cycleMatroid ≤r H.cycleMatroid :=
   cycleMatroid_isRestriction_of_isLink h.2
+
+private lemma isolatedSet_vertexDelete_isolatedSet (G : Graph α β) :
+    I(G - I(G)) = ∅ := by
+  ext x
+  constructor
+  · intro hx
+    have hxV : x ∈ V(G - I(G)) := (G - I(G)).isolatedSet_subset hx
+    have hxG : x ∈ V(G) := by
+      simpa [vertexDelete_vertexSet] using hxV.1
+    have hxI : x ∉ I(G) := by
+      simpa [vertexDelete_vertexSet] using hxV.2
+    have hnx : ¬ G.Isolated x := by
+      simpa [mem_isolatedSet_iff] using hxI
+    obtain ⟨e, hex⟩ := (not_isolated_iff hxG).1 hnx
+    have hex' : (G - I(G)).Inc e x := by
+      rw [vertexDelete_inc_iff]
+      refine ⟨hex, fun heI ↦ ?_⟩
+      obtain ⟨y, hyI, hey⟩ := (mem_setIncEdges_iff G (I(G))).1 heI
+      exact (show False from (mem_isolatedSet_iff G y).1 hyI |>.not_inc hey)
+    exact hx.not_inc hex'
+  simp
+
+private lemma exists_isLink_of_mem_vertex_of_isolatedSet_eq_empty (hI : I(G) = ∅) (hx : x ∈ V(G)) :
+    ∃ e y, G.IsLink e x y := by
+  obtain hix | h := isolated_or_exists_isLink hx
+  · have : x ∈ I(G) := by simpa [mem_isolatedSet_iff] using hix
+    simp [hI] at this
+  exact h
+
+private lemma exists_isCyclicWalk_of_cycleMatroid_connected [G.Loopless]
+    (hconn : G.cycleMatroid.Connected) (he : e ∈ E(G)) (hf : f ∈ E(G)) (hef : e ≠ f) :
+    ∃ C, G.IsCyclicWalk C ∧ e ∈ E(C) ∧ f ∈ E(C) := by
+  obtain ⟨C, hC, heC, hfC⟩ := hconn.exists_isCircuit_of_ne
+    (by simpa using he) (by simpa using hf) hef
+  rw [cycleMatroid_isCircuit] at hC
+  obtain ⟨C, hC', rfl⟩ := hC
+  exact ⟨C, hC', by simpa using heC, by simpa using hfC⟩
+
+private lemma cycleMatroid_connectedTo_of_incident [G.Loopless] (hconn : G.PreconnGE 2)
+    (hxy : G.IsLink e x y) (hxz : G.IsLink f x z) :
+    G.cycleMatroid.ConnectedTo e f := by
+  by_cases hef : e = f
+  · subst hef
+    exact Matroid.connectedTo_self <| by simpa using hxy.edge_mem
+  rw [Graph.preconnGE_iff_forall_preconnected] at hconn
+  have hpre : (G - ({x} : Set α)).Preconnected := hconn (X := {x}) (by simp)
+  obtain ⟨P, hP, rfl, rfl⟩ := (hpre y z
+    ⟨hxy.right_mem, by simp [hxy.adj.ne.symm]⟩
+    ⟨hxz.right_mem, by simp [hxz.adj.ne.symm]⟩).exists_isPath
+  have hPx : x ∉ P := by
+    intro hxP
+    have hxV : x ∈ V(G - ({x} : Set α)) := hP.isWalk.vertex_mem_of_mem hxP
+    simp [vertexDelete_vertexSet] at hxV
+  have hP' : G.IsPath P := hP.of_le vertexDelete_le
+  have hQ : G.IsPath (P.concat f x) := by
+    rw [concat_isPath_iff]
+    exact ⟨hP', hxz.symm, hPx⟩
+  have heP : e ∉ P.edge := by
+    intro heP
+    have heP' : e ∈ E(P) := by simpa using heP
+    have hdel : e ∉ E(G - ({x} : Set α)) := by
+      intro hedel
+      obtain ⟨a, b, hab⟩ := exists_isLink_of_mem_edgeSet hedel
+      obtain ⟨habG, hax, hbx⟩ := (vertexDelete_isLink_iff G ({x} : Set α)).1 hab
+      obtain ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ := habG.eq_and_eq_or_eq_and_eq hxy
+      · exact hax rfl
+      · exact hbx rfl
+    exact hdel <| hP.isWalk.edgeSet_subset heP'
+  have heQ : e ∉ (P.concat f x).edge := by
+    simp [WList.concat_edge, heP, hef]
+  let C : WList α β := cons x e (P.concat f x)
+  have hC : G.IsCyclicWalk C := by
+    dsimp [C]
+    simpa using hQ.cons_isCyclicWalk (e := e) (by simpa using hxy.symm) heQ
+  have hC' : G.cycleMatroid.IsCircuit E(C) := by
+    rw [cycleMatroid_isCircuit]
+    exact ⟨C, hC, rfl⟩
+  exact hC'.mem_connectedTo_mem (by simp [C]) (by simp [C])
+
+private lemma cycleMatroid_connectedTo_firstEdge_lastEdge_of_isWalk [G.Loopless]
+    (hconn : G.PreconnGE 2) {W : WList α β} (hW : G.IsWalk W) (hne : W.Nonempty) :
+    G.cycleMatroid.ConnectedTo hne.firstEdge hne.lastEdge := by
+  obtain ⟨u, e, w, rfl⟩ := hne.exists_cons
+  obtain ⟨v, rfl⟩ | hw := w.exists_eq_nil_or_nonempty
+  · exact Matroid.connectedTo_self <| by simpa using (cons_isWalk_iff.mp hW).1.edge_mem
+  obtain ⟨v, f, w', rfl⟩ := hw.exists_cons
+  have h₁ : G.IsLink e u v := (cons_isWalk_iff.mp hW).1
+  have htail : G.IsWalk (cons v f w') := (cons_isWalk_iff.mp hW).2
+  have h₂ : G.IsLink f v w'.first := (cons_isWalk_iff.mp htail).1
+  have htailConn : G.cycleMatroid.ConnectedTo f hne.lastEdge := by
+    simpa [WList.Nonempty.firstEdge_cons, hne.lastEdge_cons] using
+      cycleMatroid_connectedTo_firstEdge_lastEdge_of_isWalk hconn htail hw
+  exact (cycleMatroid_connectedTo_of_incident hconn h₁.symm h₂).trans htailConn
+
+private lemma cycleMatroid_connected_of_preconnGE_two [G.Loopless] (hconn : G.PreconnGE 2)
+    (hE : E(G).Nonempty) : G.cycleMatroid.Connected := by
+  refine ⟨?_, fun e f he hf ↦ ?_⟩
+  · exact ⟨hE.choose, by simpa using hE.choose_spec⟩
+  have hpre : G.Preconnected := by
+    rw [← Graph.preconnGE_one_iff]
+    exact hconn.anti_right (by decide : 1 ≤ 2)
+  obtain ⟨W, hWne, hW, hfirst, hlast⟩ := Graph.Preconnected.exists_isWalk_firstEdge_lastEdge hpre
+    (by simpa using he) (by simpa using hf)
+  simpa [hfirst, hlast] using cycleMatroid_connectedTo_firstEdge_lastEdge_of_isWalk hconn hW hWne
+
+private lemma cycleMatroid_tutteConnected_two_of_preconnGE_two [G.Loopless]
+    (hconn : G.PreconnGE 2) : G.cycleMatroid.TutteConnected 2 := by
+  by_cases hE : E(G).Nonempty
+  · exact (cycleMatroid_connected_of_preconnGE_two hconn hE).tutteConnected_two
+  refine Matroid.tutteConnected_of_subsingleton ?_ 2
+  simp [cycleMatroid_E, Set.not_nonempty_iff_eq_empty.mp hE]
+
+private lemma preconnGE_two_of_cycleMatroid_tutteConnected_two [G.Loopless]
+    (hI : I(G) = ∅) (hconn : G.cycleMatroid.TutteConnected 2) :
+    G.PreconnGE 2 := by
+  rw [Graph.preconnGE_iff_forall_preconnected]
+  intro X hX
+  have hXss : X.Subsingleton := by
+    refine encard_le_one_iff_subsingleton.1 ?_
+    enat_to_nat!
+    omega
+  obtain rfl | ⟨x, rfl⟩ := hXss.eq_empty_or_singleton
+  · intro y z hy hz
+    have hyG : y ∈ V(G) := by simpa [vertexDelete_vertexSet] using hy
+    have hzG : z ∈ V(G) := by simpa [vertexDelete_vertexSet] using hz
+    obtain ⟨e, u, heu⟩ := exists_isLink_of_mem_vertex_of_isolatedSet_eq_empty hI hyG
+    obtain ⟨f, v, hfv⟩ := exists_isLink_of_mem_vertex_of_isolatedSet_eq_empty hI hzG
+    by_cases hef : e = f
+    · obtain ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ := heu.eq_and_eq_or_eq_and_eq (hef ▸ hfv)
+      · exact ConnBetween.refl hy
+      simpa [vertexDelete_empty] using heu.connBetween
+    haveI : G.cycleMatroid.Nonempty := ⟨e, by simpa using heu.edge_mem⟩
+    have hMconn : G.cycleMatroid.Connected := Matroid.tutteConnected_two_iff.mp hconn
+    obtain ⟨C, hC, heC, hfC⟩ :=
+      exists_isCyclicWalk_of_cycleMatroid_connected hMconn heu.edge_mem hfv.edge_mem hef
+    obtain ⟨y', u', hyu⟩ := C.exists_isLink_of_mem_edge heC
+    obtain ⟨z', v', hzv⟩ := C.exists_isLink_of_mem_edge hfC
+    have hyu' : G.IsLink e y' u' := (hC.isWalk.isLink_iff_isLink_of_mem heC).1 hyu
+    have hzv' : G.IsLink f z' v' := (hC.isWalk.isLink_iff_isLink_of_mem hfC).1 hzv
+    have hyC : y ∈ C := by
+      obtain ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ := hyu'.eq_and_eq_or_eq_and_eq heu
+      · simpa using hyu.left_mem
+      · simpa using hyu.right_mem
+    have hzC : z ∈ C := by
+      obtain ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ := hzv'.eq_and_eq_or_eq_and_eq hfv
+      · simpa using hzv.left_mem
+      · simpa using hzv.right_mem
+    simpa [vertexDelete_empty] using IsWalk.connBetween_of_mem_of_mem hC.isWalk hyC hzC
+  · intro y z hy hz
+    have hy' : y ∈ V(G) ∧ y ∉ ({x} : Set α) := by simpa [vertexDelete_vertexSet] using hy
+    have hz' : z ∈ V(G) ∧ z ∉ ({x} : Set α) := by simpa [vertexDelete_vertexSet] using hz
+    have hyG : y ∈ V(G) := hy'.1
+    have hzG : z ∈ V(G) := hz'.1
+    have hyx : y ≠ x := by simpa using hy'.2
+    have hzx : z ≠ x := by simpa using hz'.2
+    obtain ⟨e, u, heu⟩ := exists_isLink_of_mem_vertex_of_isolatedSet_eq_empty hI hyG
+    obtain ⟨f, v, hfv⟩ := exists_isLink_of_mem_vertex_of_isolatedSet_eq_empty hI hzG
+    by_cases hef : e = f
+    · obtain hEq | hEq := heu.eq_and_eq_or_eq_and_eq (hef ▸ hfv)
+      · rcases hEq with ⟨rfl, rfl⟩
+        exact ConnBetween.refl hy
+      rcases hEq with ⟨hyv, huz⟩
+      subst u
+      have hxy : (G - ({x} : Set α)).IsLink e y z := by
+        rw [vertexDelete_isLink_iff]
+        exact ⟨heu, hyx, hzx⟩
+      exact hxy.connBetween
+    haveI : G.cycleMatroid.Nonempty := ⟨e, by simpa using heu.edge_mem⟩
+    have hMconn : G.cycleMatroid.Connected := Matroid.tutteConnected_two_iff.mp hconn
+    obtain ⟨C, hC, heC, hfC⟩ :=
+      exists_isCyclicWalk_of_cycleMatroid_connected hMconn heu.edge_mem hfv.edge_mem hef
+    obtain ⟨y', u', hyu⟩ := C.exists_isLink_of_mem_edge heC
+    obtain ⟨z', v', hzv⟩ := C.exists_isLink_of_mem_edge hfC
+    have hyu' : G.IsLink e y' u' := (hC.isWalk.isLink_iff_isLink_of_mem heC).1 hyu
+    have hzv' : G.IsLink f z' v' := (hC.isWalk.isLink_iff_isLink_of_mem hfC).1 hzv
+    have hyC : y ∈ C := by
+      obtain ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ := hyu'.eq_and_eq_or_eq_and_eq heu
+      · simpa using hyu.left_mem
+      · simpa using hyu.right_mem
+    have hzC : z ∈ C := by
+      obtain ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ := hzv'.eq_and_eq_or_eq_and_eq hfv
+      · simpa using hzv.left_mem
+      · simpa using hzv.right_mem
+    exact hC.connBetween_deleteVertex_of_mem_of_mem x hyC hzC hyx hzx
+
+theorem cycleMatroid_tutteConnected_two_iff_preconnGE_two [G.Loopless] :
+    G.cycleMatroid.TutteConnected 2 ↔ (G - I(G)).PreconnGE 2 := by
+  let G' := G - I(G)
+  have hI : I(G') = ∅ := isolatedSet_vertexDelete_isolatedSet G
+  have hEq : G'.cycleMatroid = G.cycleMatroid := cycleMatroid_vertexDelete_isolatedSet G
+  constructor
+  · intro h
+    have h' : G'.cycleMatroid.TutteConnected 2 := by simpa [G', hEq] using h
+    exact preconnGE_two_of_cycleMatroid_tutteConnected_two hI h'
+  · intro h
+    have h' : G'.cycleMatroid.TutteConnected 2 := cycleMatroid_tutteConnected_two_of_preconnGE_two h
+    simpa [G', hEq] using h'
