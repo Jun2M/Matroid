@@ -79,15 +79,28 @@ lemma IsEdgeCut.not_connBetween_of_isLink (hF : G.IsEdgeCut F) (he : G.IsLink e 
   have := by simpa [mem_linkEdgesSet_iff] using h.edge_mem
   exact this.2 x hxS y hy hyS h.1
 
--- lemma isEdgeCut_subset_of_not_connBetween (hcon : G.ConnBetween x y)
---     (hcon' : ¬ (G ＼ F).ConnBetween x y) : ∃ F', G.IsEdgeCut F' ∧ F' ⊆ F := by
---   let G' := (G ＼ F).walkable x
---   have := ((G ＼ F).walkable_isClosedSubgraph (u := x)).linkEdgesSet_empty
---   rw [linkEdgesSet_eq_inter_of_le' edgeDelete_le] at this
---   simp only [edgeDelete_edgeSet, diff_inter_right_comm,
---     inter_eq_right.mpr (G.linkEdgesSet_subset ..), diff_eq_empty] at this
---   use δ(G, V(G')), ?_
---   use V(G')
+lemma walkable_edgeCut_subset :
+    δ(G, V((G ＼ F).walkable x)) ⊆ F := by
+  let G' := (G ＼ F).walkable x
+  have hδempty : E(G ＼ F) ∩ δ(G, V(G')) = ∅ := by
+    have hδ := ((G ＼ F).walkable_isClosedSubgraph (u := x)).linkEdgesSet_empty
+    rw [linkEdgesSet_eq_inter_of_le' edgeDelete_le] at hδ
+    simp at hδ
+    exact hδ
+  intro e he
+  by_contra heF
+  have heG : e ∈ E(G) := linkEdgesSet_subset G _ _ he
+  have hedel : e ∈ E(G ＼ F) := by
+    simp [edgeDelete_edgeSet, heG, heF]
+  have he' : e ∈ E(G ＼ F) ∩ δ(G, V(G')) := ⟨hedel, he⟩
+  rw [hδempty] at he'
+  simp at he'
+
+lemma isEdgeCut_subset_of_not_connBetween (hcon' : ¬ (G ＼ F).ConnBetween x y) :
+    ∃ F', G.IsEdgeCut F' ∧ F' ⊆ F := by
+  let _ := hcon'
+  refine ⟨δ(G, V((G ＼ F).walkable x)), ⟨V((G ＼ F).walkable x), rfl⟩, ?_⟩
+  exact walkable_edgeCut_subset (F := F) (x := x)
 
 def IsBond (G : Graph α β) (F : Set β) : Prop :=
   Minimal (fun F ↦ G.IsEdgeCut F ∧ F.Nonempty) F
@@ -122,8 +135,32 @@ lemma IsEdgeCut.disjoint_union_isBond {F} (hfin : F.Finite) (hF : G.IsEdgeCut F)
   simpa using hB.prop.2
 termination_by F.encard
 
--- lemma foo (hcon : G.ConnBetween x y) (hcon' : ¬ (G ＼ F).ConnBetween x y) :
---     ∃ B, G.IsBond B ∧ B ⊆ F := by
+lemma exists_isBond_of_not_connBetween (hcon : G.ConnBetween x y)
+    (hcon' : ¬ (G ＼ F).ConnBetween x y) (hfin : F.Finite) :
+    ∃ B, G.IsBond B ∧ B ⊆ F := by
+  let G' := (G ＼ F).walkable x
+  let F' := δ(G, V(G'))
+  have hF'cut : G.IsEdgeCut F' := ⟨V(G'), rfl⟩
+  have hF'F : F' ⊆ F := by
+    simpa [F', G'] using walkable_edgeCut_subset (F := F) (x := x)
+  have hF'fin : F'.Finite := hfin.subset hF'F
+  have hF'ne : F'.Nonempty := by
+    obtain ⟨W, hW, rfl, rfl⟩ := hcon
+    have hxG' : W.first ∈ V(G') := by
+      have hx : W.first ∈ V(G ＼ F) := by simpa using hW.first_mem
+      simpa [G'] using mem_walkable (G := G ＼ F) hx
+    have hyG' : W.last ∉ V(G') := by
+      simpa [G', mem_walkable_iff] using hcon'
+    obtain ⟨e, he⟩ : (E(W) ∩ F').Nonempty := by
+      simpa [F', G'] using hW.inter_linkEdgesSet_nonempty hxG' hyG'
+    exact ⟨e, he.2⟩
+  obtain ⟨B, hBF', hB⟩ :=
+    IsEdgeCut.exists_isBond_of_nonempty (G := G) (F := F') hF'fin hF'ne hF'cut
+  exact ⟨B, hB, hBF'.trans hF'F⟩
+
+lemma IsEdgeCutBetween.exists_isBond_subset (hF : G.IsEdgeCutBetween F x y) (hfin : F.Finite)
+    (hcon : G.ConnBetween x y) : ∃ B, G.IsBond B ∧ B ⊆ F :=
+  exists_isBond_of_not_connBetween (F := F) hcon hF.not_connBetween hfin
 
 /-! ### Bridges -/
 
