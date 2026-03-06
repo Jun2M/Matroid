@@ -278,18 +278,20 @@ lemma Bipartition.bipartite (B : G.Bipartition) : G.Bipartite :=
 @[simps]
 def CompleteBipartiteGraph.bipartition (m n : ℕ) :
     (CompleteBipartiteGraph m n).Bipartition where
-  left := Set.range Sum.inl
-  right := Set.range Sum.inr
+  left := Sum.inl '' Set.Iio m
+  right := Sum.inr '' Set.Iio n
   union_eq := by
     ext x
-    cases x <;> simp
+    cases x <;> simp [CompleteBipartiteGraph]
   disjoint := by
     rw [Set.disjoint_left]
-    rintro x ⟨i, rfl⟩ ⟨j, h⟩
+    rintro x ⟨i, hi, rfl⟩ ⟨j, hj, h⟩
     cases h
   forall_edge e he := by
-    rcases e with ⟨i, j⟩
-    exact ⟨Sum.inl i, by simp, Sum.inr j, by simp, by simp [CompleteBipartiteGraph]⟩
+    have he' : e.1 < m ∧ e.2 < n := by
+      simpa [CompleteBipartiteGraph] using he
+    exact ⟨Sum.inl e.1, by simp [he'.1], Sum.inr e.2, by simp [he'.2],
+      by simp [CompleteBipartiteGraph, he']⟩
 
 @[simp]
 lemma completeBipartiteGraph_bipartite (m n : ℕ) : (CompleteBipartiteGraph m n).Bipartite :=
