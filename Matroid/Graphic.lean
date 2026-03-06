@@ -314,3 +314,32 @@ theorem cycleMatroid_tutteConnected_two_iff_preconnGE_two [G.Loopless] :
   · intro h
     have h' : G'.cycleMatroid.TutteConnected 2 := cycleMatroid_tutteConnected_two_of_preconnGE_two h
     simpa [G', hEq] using h'
+
+private lemma isolatedSet_eq_empty_of_connected_nontrivial
+    (hG : G.Connected) (hV : V(G).Nontrivial) : I(G) = ∅ := by
+  ext x
+  constructor
+  · intro hx
+    have hxV : x ∈ V(G) := G.isolatedSet_subset hx
+    obtain ⟨e, y, hxy, -⟩ := hG.exists_isLink_of_mem hV hxV
+    exact False.elim <| (mem_isolatedSet_iff G x).1 hx |>.not_isLink hxy
+  simp
+
+theorem cycleMatroid_tutteConnected_two_iff_preconnGE_two_of_connected [G.Loopless]
+    (hG : G.Connected) : G.cycleMatroid.TutteConnected 2 ↔ G.PreconnGE 2 := by
+  obtain hss | hV := V(G).subsingleton_or_nontrivial
+  · have hpre : G.PreconnGE 2 := by
+      refine Graph.IsComplete.preconnGE ?_ 2
+      intro x hx y hy hxy
+      exact False.elim <| hxy <| hss hx hy
+    have hE : E(G) = ∅ := by
+      rw [eq_empty_iff_forall_notMem]
+      intro e he
+      obtain ⟨x, y, hxy⟩ := G.exists_isLink_of_mem_edgeSet he
+      simp [hss hxy.left_mem hxy.right_mem] at hxy
+    have hM : G.cycleMatroid.TutteConnected 2 := by
+      refine Matroid.tutteConnected_of_subsingleton ?_ 2
+      simp [cycleMatroid_E, hE]
+    exact ⟨fun _ ↦ hpre, fun _ ↦ hM⟩
+  have hI : I(G) = ∅ := isolatedSet_eq_empty_of_connected_nontrivial hG hV
+  simpa [hI, vertexDelete_empty] using (cycleMatroid_tutteConnected_two_iff_preconnGE_two (G := G))
